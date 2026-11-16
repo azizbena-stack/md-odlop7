@@ -2,7 +2,7 @@
 export const CATS = {
   urgence: 'Urgence', nuit: 'Abri & nuit', eau: 'Eau', feu: 'Feu', manger: 'Se nourrir',
   soins: 'Premiers secours', montagne: 'Montagne', orient: 'Orientation', signal: 'Se faire trouver',
-  animaux: 'Animaux', potager: 'Potager', voyage: 'Voyage',
+  animaux: 'Animaux', potager: 'Potager', voyage: 'Voyage', mer: 'Mer', meteo: 'Météo',
 };
 
 export const FICHES = [
@@ -205,6 +205,69 @@ export const FICHES = [
 <li>L'eau du robinet est potable en France, sauf panneau « eau non potable » sur les fontaines.</li>
 <li>Garde une photocopie de ton passeport et le numéro de ton ambassade dans <b>Moi › Fiche</b>.</li></ul>` },
 ];
+
+FICHES.push(
+{ id: 'homme-mer', cat: 'mer', titre: 'Homme à la mer', mots: 'homme mer tombé eau bateau chute équipier mob',
+  corps: `<ol><li><b>Crie</b> « Un homme à la mer ! » et appuie sur <b>Homme à la mer</b> dans Repère : la position est enregistrée et la flèche te ramène dessus.</li>
+<li><b>Désigne quelqu'un</b> qui le montre du doigt sans jamais le quitter des yeux.</li>
+<li><b>Lance</b> bouée, perche IOR, tout ce qui flotte.</li>
+<li><b>Alerte</b> : VHF canal 16 (MAYDAY) ou bouton rouge ASN/DSC, sinon 196 (CROSS) ou 112.</li>
+<li><b>Reviens</b> sur lui lentement, par-dessous le vent, moteur au point mort à l'approche (hélice).</li></ol>
+<p class="note">La nuit ou par mer formée, on perd quelqu'un de vue en quelques secondes. Le point GPS enregistré tout de suite fait souvent la différence.</p>` },
+
+{ id: 'mayday', cat: 'mer', titre: 'Appel MAYDAY à la VHF', mots: 'mayday vhf radio canal 16 cross détresse appel pan pan',
+  corps: `<p><b>Canal 16</b>, puissance maximale. Si ta VHF a l'ASN (DSC) : maintiens le bouton rouge « Distress » 5 secondes, puis parle sur le 16.</p>
+<ol><li>« <b>MAYDAY MAYDAY MAYDAY</b> »</li><li>« Ici <i>nom du bateau</i> » (3 fois), indicatif, MMSI</li>
+<li>« MAYDAY <i>nom du bateau</i> »</li><li><b>Position</b> : coordonnées affichées dans l'onglet SOS</li>
+<li><b>Nature de la détresse</b> (voie d'eau, feu, homme à la mer…) et <b>aide demandée</b></li>
+<li><b>Nombre de personnes</b>, autres infos (radeau, gilets)</li><li>« <b>À vous</b> »</li></ol>
+<p><b>PAN PAN</b> (3 fois) : urgence sans danger immédiat de mort (avarie, blessé). <b>Sécurité</b> : avis météo ou danger pour la navigation.</p>
+<p class="note">Sans VHF : le <b>196</b> joint le CROSS depuis un téléphone, si le réseau passe (souvent jusqu'à 10–20 km des côtes).</p>` },
+
+{ id: 'eau-froide', cat: 'mer', titre: 'Tomber dans l\'eau froide', mots: 'eau froide tombé hypothermie noyade choc thermique flotter',
+  corps: `<p><b>Règle 1 · 10 · 1</b> :</p>
+<ul><li><b>1 minute</b> de choc thermique : souffle coupé. Ne panique pas, contrôle ta respiration, garde la tête hors de l'eau.</li>
+<li><b>10 minutes</b> de mouvements utiles avant que les mains ne répondent plus : remonte, attrape quelque chose, attache-toi.</li>
+<li><b>1 heure</b> environ avant de perdre connaissance par hypothermie (variable selon l'eau et le gilet).</li></ul>
+<p>Seul : <b>position fœtale</b>, genoux ramenés, bras serrés. À plusieurs : serrez-vous en cercle. Ne nage pas pour rien, ça refroidit plus vite.</p>` },
+
+{ id: 'survie-mer', cat: 'mer', titre: 'Survie en mer et radeau', mots: 'radeau naufrage chavirage survie mer boire eau mer abandon',
+  corps: `<ul><li><b>Reste avec le bateau</b> tant qu'il flotte : il est bien plus visible qu'une tête dans l'eau.</li>
+<li>N'abandonne le navire que pour <b>monter</b> dans le radeau.</li>
+<li>Dans le radeau : attache-toi, écope, garde-toi au sec, protège-toi du soleil et du vent.</li>
+<li><b>Ne bois jamais d'eau de mer</b> ni d'urine. Rationne l'eau douce, récupère la pluie.</li>
+<li>Garde fusées et feux pour le moment où tu vois ou entends un bateau ou un avion.</li></ul>` },
+
+{ id: 'signaux-mer', cat: 'mer', titre: 'Signaux de détresse en mer', mots: 'fusée feu main fumigène signal détresse mer bras',
+  corps: `<ul><li><b>Fusée parachute rouge</b> : vue de loin (alerte).</li>
+<li><b>Feu à main rouge</b> : quand les secours approchent, pour montrer ta position.</li>
+<li><b>Fumigène orange</b> : de jour, très visible d'un avion ou d'un hélicoptère.</li>
+<li><b>Bras tendus levés et abaissés lentement</b> : signal de détresse international.</li>
+<li>Lampe, miroir, sifflet, et le <b>SOS lumineux</b> de Repère.</li></ul>
+<p class="warn">Tiens les feux à main sous le vent, bras tendu, et ne regarde pas la flamme.</p>` },
+
+{ id: 'mal-de-mer', cat: 'mer', titre: 'Mal de mer', mots: 'mal mer nausée vomir bateau',
+  corps: `<ul><li>Reste sur le pont, au centre du bateau, et regarde l'horizon.</li><li>Air frais, pas de lecture ni d'écran.</li>
+<li>Mange léger et salé, bois souvent par petites gorgées.</li><li>Prends la barre si tu peux : anticiper les mouvements aide.</li>
+<li>Vomissements répétés : déshydratation rapide, surveille-la.</li></ul>` },
+
+{ id: 'beaufort', cat: 'meteo', titre: 'Échelle de Beaufort', mots: 'beaufort vent force nœuds mer vague',
+  corps: `<table class="tbl"><tr><th>Force</th><th>Nœuds</th><th>Mer</th></tr>
+<tr><td>0–2</td><td>0–6</td><td>Calme, vaguelettes</td></tr><tr><td>3</td><td>7–10</td><td>Petite brise, quelques moutons</td></tr>
+<tr><td>4</td><td>11–16</td><td>Jolie brise, moutons nombreux</td></tr><tr><td>5</td><td>17–21</td><td>Bonne brise, embruns</td></tr>
+<tr><td>6</td><td>22–27</td><td>Vent frais : prudence, réduire la toile</td></tr><tr><td>7</td><td>28–33</td><td>Grand frais : rester au port</td></tr>
+<tr><td>8</td><td>34–40</td><td>Coup de vent</td></tr><tr><td>9</td><td>41–47</td><td>Fort coup de vent</td></tr>
+<tr><td>10+</td><td>48 +</td><td>Tempête</td></tr></table>` },
+
+{ id: 'meteo-signes', cat: 'meteo', titre: 'Lire le temps sans prévisions', mots: 'météo temps nuage baromètre pression orage prévoir ciel',
+  corps: `<ul><li><b>La pression baisse de plus de 3 hPa en 3 h</b> : dégradation rapide, vent fort probable.</li>
+<li><b>Cirrus en crochets, halo autour du soleil ou de la lune</b> : perturbation dans 12 à 24 h.</li>
+<li><b>Cumulus qui gonflent vite en tours</b> l'après-midi, puis <b>enclume</b> : orage dans l'heure.</li>
+<li><b>Houle qui grossit sans vent</b> : tempête au loin, elle peut arriver.</li>
+<li><b>Vent qui tourne brusquement</b> et fraîchit : passage d'un front.</li>
+<li><b>Brouillard du matin</b> qui se lève tôt : souvent beau temps.</li></ul>
+<p class="note">La météo téléchargée dans Repère montre aussi l'évolution de la pression prévue.</p>` },
+);
 
 // Animaux présents selon le département (zones principales, simplifié)
 const OURS = ['09', '31', '64', '65', '66', '11'];

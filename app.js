@@ -44,7 +44,11 @@ function demarrerGps() {
   if (!navigator.geolocation) return popup('<h2>GPS indisponible</h2><p>Ce navigateur ne donne pas accès à la position.</p>');
   $('#posMeta').textContent = 'Recherche des satellites…';
   watchId = navigator.geolocation.watchPosition(onPos, e => {
-    $('#posMeta').textContent = e.code === 1 ? 'Localisation refusée : autorise-la dans les réglages du téléphone.' : 'Signal GPS faible : va dans un endroit dégagé.';
+    const ios = /iPhone|iPad/.test(navigator.userAgent);
+    $('#posMeta').textContent = e.code !== 1 ? 'Signal GPS faible : va dans un endroit dégagé.'
+      : ios ? 'Localisation refusée. Réglages › Confidentialité et sécurité › Service de localisation › Sites web Safari : « Lorsque l\'app est active ». Puis Réglages › Apps › Safari › Localisation : « Demander ». Ferme et rouvre Repère.'
+      : 'Localisation refusée : Paramètres › Applications › Chrome › Autorisations › Position : « Autoriser ».';
+    $('#btnGps').hidden = false;
   }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 });
   $('#btnGps').hidden = true;
 }
@@ -61,12 +65,15 @@ function onPos(p) {
   enregistrerTrace();
   majSituation();
   majBoussole();
+  majMer();
+  meteoAuto();
 }
 
 // ---------- Situation ----------
 const TYPES = {
   eau: ['💧', "Point d'eau"], cabane: ['🛖', 'Cabane non gardée'], refuge: ['🏔', 'Refuge gardé'], gite: ['🏠', "Gîte d'étape"],
   abri: ['⛰', 'Abri naturel'], hopital: ['✚', 'Hôpital · urgences'], danger: ['⚠', 'Passage délicat'],
+  port: ['⚓', 'Port · marina'], snsm: ['🛟', 'Station de sauvetage'],
 };
 let dernierVillage = null, depActuel = null;
 
@@ -94,7 +101,7 @@ function majSituation() {
   } else tdn.textContent = 'La tendance s\'affiche après quelques minutes de marche.';
 
   // Points proches par type
-  const voulus = ['eau', 'cabane', 'refuge', 'gite', 'hopital'];
+  const voulus = S.profil === 'mer' ? ['port', 'snsm', 'hopital', 'eau'] : ['eau', 'cabane', 'refuge', 'gite', 'hopital'];
   const lignes = [];
   for (const t of voulus) {
     const list = POINTS.filter(p => p[0] === t || (t === 'cabane' && p[0] === 'abri'));
@@ -152,6 +159,119 @@ function majSoleil() {
 }
 const duree = ms => { const m = Math.round(ms / 60e3); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
 majSoleil(); setInterval(majSoleil, 60e3);
+
+// ---------- Météo (téléchargée quand il y a du réseau, lisible hors ligne) ----------
+const WMO = c => c == null ? ['', '—'] : c === 0 ? ['☀️', 'Ciel clair'] : c <= 2 ? ['🌤', 'Peu nuageux'] : c === 3 ? ['☁️', 'Couvert'] : c <= 48 ? ['🌫', 'Brouillard']
+  : c <= 57 ? ['🌦', 'Bruine'] : c <= 67 ? ['🌧', 'Pluie'] : c <= 77 ? ['🌨', 'Neige'] : c <= 82 ? ['🌦', 'Averses'] : c <= 86 ? ['🌨', 'Averses de neige'] : ['⛈', 'Orage'];
+const beaufort = kn => [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64].findIndex(s => kn < s) === -1 ? 12 : [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64].findIndex(s => kn < s);
+const JOURS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+let meteoEnCours = false;
+
+async function telechargerMeteo() {
+  if (!pos) { demarrerGps(); return popup('<h2>Position inconnue</h2><p>Active le GPS : la météo est téléchargée pour l\'endroit où tu es.</p>'); }
+  if (!navigator.onLine) return popup('<h2>Pas de réseau</h2><p>Il faut du réseau pour télécharger la météo. Ensuite, elle reste lisible hors ligne pendant 7 jours.</p>');
+  if (meteoEnCours) return; meteoEnCours = true; $('#btnMeteo').textContent = 'Téléchargement…';
+  const [la, lo] = ici().map(v => v.toFixed(2)); // ~1 km : suffisant pour la météo, ne partage pas la position exacte
+  try {
+    const f = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&hourly=temperature_2m,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,pressure_msl,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant&wind_speed_unit=kn&timezone=auto&forecast_days=7`).then(r => r.json());
+    const m = await fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${la}&longitude=${lo}&hourly=wave_height,wave_period,sea_surface_temperature&timezone=auto&forecast_days=7`).then(r => r.ok ? r.json() : null).catch(() => null);
+    if (!f.hourly) throw new Error(f.reason || 'réponse vide');
+    S.meteo = { t: Date.now(), lat: +la, lon: +lo, h: f.hourly, d: f.daily, m: m?.hourly?.wave_height?.some(v => v != null) ? m.hourly : null };
+    save(); afficherMeteo();
+  } catch (e) { popup(`<h2>Météo indisponible</h2><p>${esc(e.message || e)}</p>`); }
+  meteoEnCours = false; $('#btnMeteo').textContent = 'Mettre à jour la météo';
+}
+$('#btnMeteo').onclick = telechargerMeteo;
+function meteoAuto() {
+  if (!navigator.onLine || meteoEnCours) return;
+  const M = S.meteo;
+  if (!M || Date.now() - M.t > 3 * 3600e3 || distance([M.lat, M.lon], ici()) > 30000) telechargerMeteo();
+}
+
+function indexHeure(M) { // heure de prévision la plus proche de maintenant
+  const now = Date.now();
+  let best = 0, bd = Infinity;
+  M.h.time.forEach((t, i) => { const d = Math.abs(new Date(t).getTime() - now); if (d < bd) { bd = d; best = i; } });
+  return bd > 3 * 3600e3 ? -1 : best;
+}
+function alertesMeteo(M, i, heures = 12) {
+  const a = [], fin = Math.min(M.h.time.length, i + heures);
+  const raf = Math.max(...M.h.wind_gusts_10m.slice(i, fin)), vent = Math.max(...M.h.wind_speed_10m.slice(i, fin));
+  const orage = M.h.weather_code.slice(i, fin).findIndex(c => c >= 95);
+  if (orage >= 0) a.push(`⛈ Orage prévu ${orage === 0 ? 'maintenant' : `dans ${orage} h`}`);
+  if (raf >= 34 || vent >= 34) a.push(`💨 Coup de vent : rafales jusqu'à ${Math.round(raf)} nœuds dans les ${heures} h`);
+  else if (vent >= 22) a.push(`💨 Vent frais (force ${beaufort(vent)}) dans les ${heures} h : prudence en mer et en crête`);
+  const p = M.h.pressure_msl, d3 = p[Math.min(i + 3, p.length - 1)] - p[i];
+  if (d3 <= -3) a.push(`↘ La pression va chuter de ${Math.abs(d3).toFixed(0)} hPa en 3 h : dégradation rapide`);
+  return a;
+}
+function afficherMeteo() {
+  const M = S.meteo; if (!M) return;
+  const age = Date.now() - M.t, i = indexHeure(M);
+  $('#meteoAge').textContent = `Téléchargée il y a ${duree(age)}`;
+  $('#btnMeteo').textContent = 'Mettre à jour la météo';
+  if (i < 0) { $('#meteoNow').innerHTML = '<p class="meta" style="margin:0">Prévisions trop anciennes : mets-les à jour dès que tu as du réseau.</p>'; $('#meteoJours').innerHTML = ''; $('#meteoAlerte').innerHTML = ''; return; }
+  const h = M.h, [ico, lib] = WMO(h.weather_code[i]), vent = h.wind_speed_10m[i];
+  const tend = h.pressure_msl[Math.min(i + 6, h.pressure_msl.length - 1)] - h.pressure_msl[i];
+  const chips = [
+    `Vent ${Math.round(vent)} nd du ${cardinal(h.wind_direction_10m[i])} · force ${beaufort(vent)}`,
+    `Rafales ${Math.round(h.wind_gusts_10m[i])} nd`,
+    `${Math.round(h.pressure_msl[i])} hPa ${tend > 1 ? '↗' : tend < -1 ? '↘' : '→'}`,
+    `Pluie ${h.precipitation_probability[i] ?? 0} %`,
+  ];
+  if (M.m) {
+    const j = M.m.time.indexOf(h.time[i]);
+    if (j >= 0 && M.m.wave_height[j] != null) chips.push(`Vagues ${M.m.wave_height[j].toFixed(1).replace('.', ',')} m · ${Math.round(M.m.wave_period[j])} s`, `Eau ${Math.round(M.m.sea_surface_temperature[j])} °C`);
+  }
+  $('#meteoNow').innerHTML = `<span class="ico">${ico}</span><span class="temp">${Math.round(h.temperature_2m[i])}°</span><span class="det">${lib}</span>
+    <div class="meteo-chips">${chips.map(c => `<span>${c}</span>`).join('')}</div>`;
+  const al = alertesMeteo(M, i);
+  $('#meteoAlerte').innerHTML = al.map(x => `<div class="meteo-alerte">${x}</div>`).join('');
+  const d = M.d;
+  $('#meteoJours').innerHTML = d.time.map((t, k) => `<div><b>${k === 0 ? 'auj.' : JOURS[new Date(t + 'T12:00').getDay()]}</b><i>${WMO(d.weather_code[k])[0]}</i>${Math.round(d.temperature_2m_max[k])}° / ${Math.round(d.temperature_2m_min[k])}°<br>${Math.round(d.wind_speed_10m_max[k])} nd</div>`).join('');
+  $('#merBft').textContent = beaufort(vent);
+}
+afficherMeteo(); setInterval(afficherMeteo, 10 * 60e3);
+addEventListener('online', () => pos && meteoAuto());
+
+// ---------- Mer : vitesse, cap, homme à la mer, ports ----------
+const fmtMilles = m => `${(m / 1852).toFixed(m < 18520 ? 1 : 0).replace('.', ',')} M`;
+let fixPrec = null;
+function majMer() {
+  if (!pos) return;
+  const now = Date.now(), here = ici();
+  let sog = pos.coords.speed, cog = pos.coords.heading;
+  if (fixPrec && now - fixPrec.t > 3000 && (sog == null || cog == null || isNaN(cog))) {
+    const d = distance(fixPrec.ll, here);
+    sog = d / ((now - fixPrec.t) / 1000); cog = d > 5 ? bearing(fixPrec.ll, here) : null;
+  }
+  if (!fixPrec || now - fixPrec.t > 3000) fixPrec = { t: now, ll: here };
+  if (sog != null) $('#merSog').textContent = (sog * 1.94384).toFixed(1).replace('.', ',');
+  $('#merCog').textContent = cog != null && !isNaN(cog) && sog > 0.3 ? Math.round(cog) + '°' : '—';
+  if (S.profil === 'mer' && POINTS.length) {
+    const [p] = nearest(POINTS.filter(x => x[0] === 'port'), here, 1, x => [x[2], x[3]]);
+    const [s] = nearest(POINTS.filter(x => x[0] === 'snsm'), here, 1, x => [x[2], x[3]]);
+    $('#merPort').innerHTML = [p && `⚓ Abri le plus proche : <b>${esc(p.p[1])}</b> · ${fmtMilles(p.d)} au ${Math.round(p.cap)}°`, s && `🛟 Sauvetage SNSM : ${esc(s.p[1])} · ${fmtMilles(s.d)}`].filter(Boolean).join('<br>');
+  }
+}
+
+function hommeALaMer() {
+  if (!pos) { demarrerGps(); return popup('<h2>Position en cours</h2><p>Le GPS cherche ta position. Réappuie dans quelques secondes. En attendant : crie « Un homme à la mer ! », lance une bouée, ne le quitte pas des yeux.</p>'); }
+  const h = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const p = { id: Date.now().toString(36), nom: `Homme à la mer ${h}`, lat: ici()[0], lon: ici()[1], t: Date.now() };
+  S.points.unshift(p); S.cible = p.id; save(); majPoints(); majBoussole();
+  navigator.vibrate?.([300, 100, 300, 100, 300]);
+  ouvrir('boussole');
+  popup(`<div class="k">Position enregistrée à ${h}</div><h2>Homme à la mer</h2>
+    <p class="coords xl" style="font-size:22px">${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}</p>
+    <ol><li>Quelqu'un le <b>montre du doigt</b> sans le quitter des yeux.</li><li><b>Lance</b> une bouée.</li>
+    <li><b>VHF canal 16 : MAYDAY</b>, ou bouton rouge ASN.</li><li>La flèche verte de la boussole te ramène au point.</li></ol>
+    <div class="grille2" style="margin:0"><a class="btn primaire" href="tel:196" style="margin:0">Appeler le CROSS 196</a><button class="btn" style="margin:0" data-ouvre-fiche="mayday">Message MAYDAY</button></div>`);
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-hom]')) hommeALaMer();
+  const f = e.target.closest('[data-ouvre-fiche]'); if (f) ouvrirFiche(f.dataset.ouvreFiche);
+});
 
 // ---------- Boussole ----------
 const DECLINAISON = 2; // ponytail: déclinaison magnétique moyenne en France (~+1° à +3° E en 2026), à ajuster par région
@@ -497,21 +617,23 @@ $('#btnBivouac').onclick = () => {
 $('#btnPerdu').onclick = () => ouvrirFiche('perdu');
 
 // ---------- Moi : profil, fiche, contacts, plan, sac ----------
-const PROFILS = { rando: 'Randonneur', alpi: 'Alpiniste', voyage: 'Voyageur', survie: 'Survie' };
+const PROFILS = { rando: 'Randonneur', alpi: 'Alpiniste', mer: 'Marin', voyage: 'Voyageur', survie: 'Survie' };
 const SACS = {
   base: ['Eau 2 L', 'Couverture de survie', 'Sifflet', 'Lampe frontale', 'Batterie externe', 'Trousse de secours', 'Couteau', 'Briquet', 'Coupe-vent', 'Couche chaude', 'En-cas', 'Carte papier'],
   alpi: ['DVA, pelle, sonde', 'Casque', 'Crampons', 'Lunettes catégorie 4', 'Crème solaire'],
   voyage: ['Copie du passeport', 'Carte bancaire de secours', 'Adaptateur prise', 'Médicaments habituels'],
   survie: ['Pastilles de purification', 'Bâche', 'Corde 10 m', 'Hameçons et fil', 'Allume-feu'],
   rando: ['Bâtons', 'Chapeau', 'Pansements ampoules'],
+  mer: ['Gilet de sauvetage', 'VHF portable étanche', 'Balise de détresse (PLB)', 'Feux à main et fumigène', 'Sac étanche', 'Lampe étanche', 'Compas de relèvement', 'Carte marine papier'],
 };
 function majProfil() {
   $('#profils').innerHTML = Object.entries(PROFILS).map(([k, v]) => `<button class="chip ${S.profil === k ? 'on' : ''}" data-p="${k}">${v}</button>`).join('');
   const items = [...SACS.base, ...(SACS[S.profil] || [])];
   $('#sac').innerHTML = items.map(i => `<li class="${S.sac.includes(i) ? 'ok' : ''}">${i}</li>`).join('');
   $('#sacScore').textContent = `${items.filter(i => S.sac.includes(i)).length} / ${items.length}`;
+  $('#merCarte').hidden = S.profil !== 'mer';
 }
-$('#profils').onclick = e => { const b = e.target.closest('[data-p]'); if (!b) return; S.profil = b.dataset.p; save(); majProfil(); };
+$('#profils').onclick = e => { const b = e.target.closest('[data-p]'); if (!b) return; S.profil = b.dataset.p; save(); majProfil(); if (pos) { majSituation(); majMer(); } };
 $('#sac').onclick = e => { const li = e.target.closest('li'); if (!li) return; const i = li.textContent; S.sac = S.sac.includes(i) ? S.sac.filter(x => x !== i) : [...S.sac, i]; save(); majProfil(); };
 majProfil();
 
@@ -661,6 +783,8 @@ function consignes() {
   if (!S.points.length && pos) c.push(['camp', 'Marque ta position actuelle : tu pourras toujours y revenir.', [['Marquer ce point', () => $('#btnMarquer').click()]]]);
   if (batterie && !batterie.charging && batterie.level < .2) c.push(['bat', `Batterie à ${Math.round(batterie.level * 100)} %. Mode avion, luminosité au minimum, téléphone contre toi.`, []]);
   if (s.set && now < s.set && s.set - now < 90 * 60e3) c.push(['nuit', `La nuit tombe dans ${duree(s.set - now)}. Commence ton abri maintenant.`, [['Comment faire un abri', () => ouvrirFiche('abri')], ['Vérifier l\'emplacement', () => $('#btnBivouac').click()]]]);
+  const M = S.meteo, mi = M ? indexHeure(M) : -1;
+  if (mi >= 0) for (const a of alertesMeteo(M, mi, 6)) c.push(['meteo' + a.slice(0, 3), a + '. Mets-toi à l\'abri à temps.', [['Orage et foudre', () => ouvrirFiche('orage')]]]);
   if (s.set && now > s.set) c.push(['dort', 'Il fait nuit. Reste à l\'abri, isolé du sol. Ne marche pas dans le noir.', [['Où ne pas dormir', () => ouvrirFiche('bivouac')]]]);
   if (now - derniereGorgee > 2 * 3600e3) c.push(['eau', 'Ça fait 2 heures. Bois quelques gorgées.', [['J\'ai bu', () => { derniereGorgee = Date.now(); refusConsignes.delete('eau'); coach(); }], ['Trouver de l\'eau', () => ouvrirFiche('eau-trouver')]]]);
   const tdn = $('#tendance');

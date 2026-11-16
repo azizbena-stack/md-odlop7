@@ -59,6 +59,21 @@
     <div class="arc"><div class="arc-fill" id="arcFill"></div><div class="arc-sun" id="arcSun"></div></div>
   </div>
 
+  <div class="carte mer" id="merCarte" hidden>
+    <div class="k">En mer</div>
+    <div class="stats"><div><b id="merSog">—</b><span>nœuds</span></div><div><b id="merCog">—</b><span>cap fond</span></div><div><b id="merBft">—</b><span>Beaufort prévu</span></div></div>
+    <button class="btn large hom" data-hom>Homme à la mer</button>
+    <div class="meta" id="merPort"></div>
+  </div>
+
+  <div class="carte meteo" id="meteoCarte">
+    <div class="row"><div class="k">Météo</div><span class="meta" id="meteoAge">Pas encore téléchargée</span></div>
+    <div id="meteoAlerte"></div>
+    <div id="meteoNow" class="meteo-now"></div>
+    <div class="meteo-jours" id="meteoJours"></div>
+    <button class="btn petit" id="btnMeteo" style="margin-top:12px">Télécharger la météo</button>
+  </div>
+
   <div class="carte civi">
     <div class="k">Civilisation la plus proche</div>
     <div class="cible">
@@ -136,6 +151,15 @@
     <a class="num" href="tel:196"><b>196</b><span>Mer</span></a>
   </div>
   <a class="btn large" href="sms:114">SMS au 114 · si tu ne peux pas parler</a>
+
+  <div class="carte">
+    <div class="k">En mer</div>
+    <button class="btn large hom" data-hom style="margin:0 0 8px">Homme à la mer · marquer la position</button>
+    <div class="grille2" style="margin:0">
+      <button class="btn" style="margin:0" data-ouvre-fiche="mayday">Appel MAYDAY (VHF 16)</button>
+      <a class="btn" style="margin:0" href="tel:196">CROSS · 196</a>
+    </div>
+  </div>
 
   <div class="carte">
     <div class="k">Prévenir mes proches</div>

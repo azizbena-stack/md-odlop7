@@ -104,6 +104,28 @@ main { max-width: 560px; margin: 0 auto; padding: 4px 16px 0; }
 .tendance.bien { color: var(--ok); }
 .tendance.mal { color: var(--warn); }
 
+/* Météo */
+.meteo-now { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: center; }
+.meteo-now:empty { display: none; }
+.meteo-now .ico { font-size: 44px; line-height: 1; grid-row: span 2; }
+.meteo-now .temp { font-size: 34px; font-weight: 800; font-stretch: 110%; line-height: 1; }
+.meteo-now .det { color: var(--txt2); font-size: 14px; }
+.meteo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; grid-column: 1 / -1; }
+.meteo-chips span { background: var(--bg2); border-radius: 10px; padding: 6px 10px; font-size: 13px; font-weight: 600; }
+.meteo-jours { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 14px; text-align: center; }
+.meteo-jours:empty { display: none; }
+.meteo-jours div { background: var(--bg2); border-radius: 12px; padding: 8px 2px; font-size: 11.5px; color: var(--txt2); line-height: 1.5; }
+.meteo-jours b { display: block; color: var(--txt); font-size: 12px; }
+.meteo-jours i { display: block; font-style: normal; font-size: 20px; }
+.meteo-alerte { background: rgba(255, 77, 77, .12); border-left: 3px solid var(--danger); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-weight: 700; font-size: 14px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl th, .tbl td { text-align: left; padding: 7px 6px; border-top: 1px solid var(--ligne); }
+.tbl th { color: var(--txt2); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+
+/* Mer */
+.mer { border-color: rgba(91, 184, 255, .4); background: linear-gradient(180deg, rgba(91, 184, 255, .1), var(--surface)); }
+.btn.hom { background: #FFD23F; border-color: #FFD23F; color: #1a1400; font-weight: 800; font-stretch: 110%; letter-spacing: .02em; }
+
 /* Repère à proximité */
 .proxi { border-color: rgba(94, 215, 155, .35); }
 .proxi .row:first-child { flex-wrap: wrap; gap: 4px 12px; }
