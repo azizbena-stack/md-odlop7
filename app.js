@@ -137,7 +137,7 @@ function dessinerRadar(here) {
     <text x="3" y="-68">3,3 km</text><text x="3" y="-35">1,7 km</text>
     <g transform="rotate(${rotH})"><text x="-4" y="-103" style="fill:var(--accent);font-size:10px">N</text></g>
     ${vil.map(n => { const [x, y] = xy(n); return `<rect x="${x - 4}" y="${y - 4}" width="8" height="8" rx="2" fill="var(--txt)"/><text x="${x + 7}" y="${y + 3}" style="fill:var(--txt2)">${esc(n.p[0].slice(0, 14))}</text>`; }).join('')}
-    ${pts.map(n => { const [x, y] = xy(n); const c = n.p[0] === 'eau' ? '#5BB8FF' : n.p[0] === 'danger' ? 'var(--danger)' : n.p[0] === 'hopital' ? '#fff' : 'var(--ambre)'; return `<circle cx="${x}" cy="${y}" r="3.5" fill="${c}"/>`; }).join('')}
+    ${pts.map(n => { const [x, y] = xy(n); const c = n.p[0] === 'eau' ? '#5BB8FF' : n.p[0] === 'danger' ? 'var(--danger)' : n.p[0] === 'hopital' ? '#FF2D55' : 'var(--ambre)'; return `<circle cx="${x}" cy="${y}" r="3.5" fill="${c}"/>`; }).join('')}
     <circle r="6" fill="var(--accent)"/><circle r="12" fill="none" stroke="var(--accent)" opacity=".4"/>`;
 }
 
@@ -212,6 +212,8 @@ function afficherMeteo() {
   $('#btnMeteo').textContent = 'Mettre à jour la météo';
   if (i < 0) { $('#meteoNow').innerHTML = '<p class="meta" style="margin:0">Prévisions trop anciennes : mets-les à jour dès que tu as du réseau.</p>'; $('#meteoJours').innerHTML = ''; $('#meteoAlerte').innerHTML = ''; return; }
   const h = M.h, [ico, lib] = WMO(h.weather_code[i]), vent = h.wind_speed_10m[i];
+  const sol = sunTimes(new Date(), M.lat, M.lon), nuit = sol.rise && (Date.now() < sol.rise || Date.now() > sol.set), c = h.weather_code[i];
+  $('#meteoCarte').className = 'carte meteo ' + (c >= 95 ? 'orage' : nuit ? 'nuit' : c >= 3 ? 'gris' : 'jour');
   const tend = h.pressure_msl[Math.min(i + 6, h.pressure_msl.length - 1)] - h.pressure_msl[i];
   const chips = [
     `Vent ${Math.round(vent)} nd du ${cardinal(h.wind_direction_10m[i])} · force ${beaufort(vent)}`,
@@ -664,12 +666,12 @@ $('#btnFond').onclick = () => {
   g.fillStyle = grad; g.fillRect(0, 0, 1170, 2532);
   g.strokeStyle = 'rgba(160,210,180,.06)'; g.lineWidth = 2;
   for (let r = 60; r < 1600; r += 60) { g.beginPath(); g.ellipse(200, 300, r * 1.3, r, 0, 0, 7); g.stroke(); }
-  g.fillStyle = '#FF6A2B'; g.fillRect(90, 1150, 990, 10);
-  g.font = '800 64px Archivo, sans-serif'; g.fillText('EN CAS D\'URGENCE', 90, 1260);
+  g.fillStyle = '#FF3B30'; g.fillRect(90, 1150, 990, 10);
+  g.font = '800 64px -apple-system, system-ui, sans-serif'; g.fillText('EN CAS D\'URGENCE', 90, 1260);
   const lignes = [['Nom', f.nom], ['Groupe sanguin', f.sang], ['Allergies', f.allergies], ['Traitements', f.traitements], ...S.contacts.filter(x => x.tel).slice(0, 2).map(x => ['Prévenir', `${x.nom} · ${x.tel}`])].filter(l => l[1]);
   let y = 1380;
-  for (const [k, v] of lignes) { g.fillStyle = '#9AAEA2'; g.font = '600 40px Archivo, sans-serif'; g.fillText(k.toUpperCase(), 90, y); g.fillStyle = '#ECF2EA'; g.font = '700 60px Archivo, sans-serif'; g.fillText(String(v).slice(0, 30), 90, y + 72); y += 175; }
-  g.fillStyle = '#FF6A2B'; g.font = '800 120px Archivo, sans-serif'; g.fillText('112', 90, Math.max(y + 80, 2250));
+  for (const [k, v] of lignes) { g.fillStyle = '#9AAEA2'; g.font = '600 40px -apple-system, system-ui, sans-serif'; g.fillText(k.toUpperCase(), 90, y); g.fillStyle = '#ECF2EA'; g.font = '700 60px -apple-system, system-ui, sans-serif'; g.fillText(String(v).slice(0, 30), 90, y + 72); y += 175; }
+  g.fillStyle = '#FF3B30'; g.font = '800 120px -apple-system, system-ui, sans-serif'; g.fillText('112', 90, Math.max(y + 80, 2250));
   const a = document.createElement('a'); a.download = 'fond-ecran-secours.png'; a.href = c.toDataURL('image/png'); a.click();
   popup('<h2>Fond d\'écran créé</h2><p>Mets cette image en <b>fond d\'écran verrouillé</b> (Photos › Partager › Utiliser en fond d\'écran). Un secouriste verra tes infos sans déverrouiller le téléphone.</p>');
 };

@@ -5,16 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Repère · Survie hors réseau</title>
 <meta name="description" content="Survie, orientation et secours, sans internet. Toute la France.">
-<meta name="theme-color" content="#0B110E">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F2F2F7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-512.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Repère">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -44,6 +42,7 @@
 <main>
 <!-- SITUATION -->
 <section id="v-situation" class="vue active">
+  <h1 class="titre">Situation</h1>
   <div class="carte hero">
     <div class="k">Ta position</div>
     <div id="coords" class="coords">— GPS en attente —</div>
@@ -116,6 +115,7 @@
 
 <!-- BOUSSOLE -->
 <section id="v-boussole" class="vue">
+  <h1 class="titre">Boussole</h1>
   <div class="carte compas-carte">
     <div class="cap-num"><span id="capNum">—</span><small id="capCard"></small></div>
     <div class="compas" id="compas">
@@ -141,6 +141,7 @@
 
 <!-- SOS -->
 <section id="v-sos" class="vue">
+  <h1 class="titre">Secours</h1>
   <div class="carte secours">
     <div class="k">À lire aux secours</div>
     <div class="coords xl" id="sosCoords">—</div>
@@ -188,6 +189,7 @@
 
 <!-- GUIDE -->
 <section id="v-guide" class="vue">
+  <h1 class="titre">Guide</h1>
   <div class="ask">
     <input id="question" type="search" placeholder="Pose ta question… ex : je me suis coupé" autocomplete="off">
     <button class="btn primaire" id="btnDemander">Demander</button>
@@ -204,6 +206,7 @@
 
 <!-- MOI -->
 <section id="v-moi" class="vue">
+  <h1 class="titre">Moi</h1>
   <div class="carte">
     <div class="k">Je suis</div>
     <div class="chips" id="profils"></div>
