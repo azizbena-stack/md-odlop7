@@ -92,12 +92,12 @@ main { max-width: 560px; margin: 0 auto; padding: 0 16px; }
 /* Boutons : capsules teintées, comme iOS */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0;
-  background: var(--bg2); color: var(--accent); border-radius: 99px; padding: 13px 20px; font-weight: 600; cursor: pointer; margin-top: 12px;
+  background: var(--bg2); color: var(--accent); border-radius: 16px; padding: 13px 18px; line-height: 1.25; text-align: center; font-weight: 600; cursor: pointer; margin-top: 12px;
   position: relative; z-index: 1; transition: transform .12s, opacity .12s;
 }
 .btn:active, .tuile:active, .num:active, .chip:active { transform: scale(.96); opacity: .8; }
 .btn.primaire { background: var(--accent); color: #fff; }
-.btn.petit { padding: 7px 14px; font-size: 15px; margin: 0; }
+.btn.petit { padding: 7px 14px; font-size: 15px; margin: 0; border-radius: 99px; }
 .btn.large { width: 100%; margin: 0 0 12px; }
 
 /* Soleil */
