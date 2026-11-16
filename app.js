@@ -544,7 +544,7 @@ $('#btnIA').onclick = () => {
 
 function contexteSituation() {
   const c = [];
-  const p = { rando: 'randonneur', alpi: 'alpiniste', voyage: 'voyageur', survie: 'en situation de survie' }[S.profil];
+  const p = { rando: 'randonneur', alpi: 'alpiniste', voyage: 'voyageur', survie: 'en situation de survie', mer: 'marin, en mer' }[S.profil] || 'randonneur';
   c.push(`Utilisateur : ${p}.`);
   if (pos) c.push(`Position : ${ici()[0].toFixed(4)}, ${ici()[1].toFixed(4)}${pos.coords.altitude != null ? ', altitude ' + Math.round(pos.coords.altitude) + ' m' : ''}.`);
   if (dernierVillage) c.push(`Lieu habité le plus proche : ${dernierVillage.p[0]} à ${fmtDist(dernierVillage.d)} direction ${cardinal(dernierVillage.cap)}.`);
