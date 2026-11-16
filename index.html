@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Repère · Survie hors réseau</title>
+<meta name="description" content="Survie, orientation et secours, sans internet. Toute la France.">
+<meta name="theme-color" content="#0B110E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-512.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Repère">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-pos" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-comp" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 5l3 7-3 7-3-7z" fill="currentColor"/></symbol>
+  <symbol id="i-sos" viewBox="0 0 24 24"><path d="M12 3v3M4.6 6.6l2.1 2.1M19.4 6.6l-2.1 2.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M5 20a7 7 0 0 1 14 0z" fill="currentColor"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-moi" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21a8 8 0 0 1 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-fleche" viewBox="0 0 24 24"><path d="M12 2l7 19-7-4-7 4z" fill="currentColor"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="brand">
+    <img src="icon.svg" alt="" width="34" height="34">
+    <div><b>Repère</b><small id="etatReseau">Hors réseau prêt</small></div>
+  </div>
+  <button id="btnSurvie" class="survie-toggle" aria-pressed="false"><span class="dot"></span>Mode survie</button>
+</header>
+
+<div id="coach" class="coach" hidden>
+  <div class="coach-k">Repère te guide</div>
+  <div id="coachMsg" class="coach-msg"></div>
+  <div class="coach-actions" id="coachActions"></div>
+</div>
+
+<main>
+<!-- SITUATION -->
+<section id="v-situation" class="vue active">
+  <div class="carte hero">
+    <div class="k">Ta position</div>
+    <div id="coords" class="coords">— GPS en attente —</div>
+    <div class="meta" id="posMeta">Appuie pour activer la localisation</div>
+    <button class="btn primaire" id="btnGps">Activer le GPS</button>
+  </div>
+
+  <div class="carte soleil">
+    <div class="row">
+      <div><div class="k">Lumière du jour</div><div class="big" id="nuitDans">—</div></div>
+      <div class="soleil-heures" id="soleilHeures"></div>
+    </div>
+    <div class="arc"><div class="arc-fill" id="arcFill"></div><div class="arc-sun" id="arcSun"></div></div>
+  </div>
+
+  <div class="carte civi">
+    <div class="k">Civilisation la plus proche</div>
+    <div class="cible">
+      <svg class="fleche" id="flecheVillage"><use href="#i-fleche"/></svg>
+      <div><div class="big" id="villageNom">—</div><div class="meta" id="villageInfo"></div></div>
+    </div>
+    <div class="tendance" id="tendance"></div>
+  </div>
+
+  <div class="carte proxi" id="proxiCarte">
+    <div class="row"><div class="k">Repère à proximité</div><span class="meta" id="proxiEtat">Sans réseau · Bluetooth</span></div>
+    <ul class="proches" id="proxiListe"></ul>
+    <div class="grille2" style="margin:12px 0 0">
+      <button class="btn primaire" id="btnProxi" style="margin:0">Repérer les autres</button>
+      <button class="btn" id="btnProxiSos" style="margin:0" disabled>Envoyer un SOS</button>
+    </div>
+  </div>
+
+  <div class="carte">
+    <div class="k">Autour de toi</div>
+    <div id="radarWrap" class="radar-wrap"><svg id="radar" viewBox="-110 -110 220 220"></svg></div>
+    <ul class="proches" id="proches"></ul>
+  </div>
+
+  <div class="grille2">
+    <button class="tuile" id="btnBivouac"><b>Où je dors,<br>c'est sûr ?</b><span>Analyse du bivouac</span></button>
+    <button class="tuile" id="btnPerdu"><b>Je suis<br>perdu</b><span>Étapes guidées</span></button>
+  </div>
+
+  <div class="carte" id="risquesCarte" hidden>
+    <div class="k">Dans ce secteur</div>
+    <ul class="liste" id="risques"></ul>
+  </div>
+</section>
+
+<!-- BOUSSOLE -->
+<section id="v-boussole" class="vue">
+  <div class="carte compas-carte">
+    <div class="cap-num"><span id="capNum">—</span><small id="capCard"></small></div>
+    <div class="compas" id="compas">
+      <div class="rose" id="rose"></div>
+      <svg class="cible-fleche" id="cibleFleche" hidden><use href="#i-fleche"/></svg>
+      <div class="aiguille"></div>
+    </div>
+    <div class="meta center" id="cibleInfo">Choisis un point ci-dessous pour être guidé</div>
+    <button class="btn" id="btnCompas">Activer la boussole</button>
+  </div>
+
+  <div class="carte">
+    <div class="row"><div class="k">Mes points</div><button class="btn petit primaire" id="btnMarquer">+ Marquer ici</button></div>
+    <ul class="liste points" id="mesPoints"></ul>
+  </div>
+
+  <div class="carte">
+    <div class="row"><div class="k">Parcours</div><button class="btn petit" id="btnTrace">Enregistrer</button></div>
+    <div class="stats"><div><b id="traceDist">0 m</b><span>parcourus</span></div><div><b id="traceDuree">0 min</b><span>durée</span></div><div><b id="tracePts">0</b><span>points</span></div></div>
+    <svg id="traceSvg" class="trace-svg" viewBox="0 0 300 160"></svg>
+  </div>
+</section>
+
+<!-- SOS -->
+<section id="v-sos" class="vue">
+  <div class="carte secours">
+    <div class="k">À lire aux secours</div>
+    <div class="coords xl" id="sosCoords">—</div>
+    <div class="coords dms" id="sosDms"></div>
+    <div class="meta" id="sosLieu"></div>
+  </div>
+
+  <a class="appel112" href="tel:112"><b>112</b><span>Appel d'urgence · passe par tous les opérateurs</span></a>
+  <div class="grille4">
+    <a class="num" href="tel:15"><b>15</b><span>SAMU</span></a>
+    <a class="num" href="tel:18"><b>18</b><span>Pompiers</span></a>
+    <a class="num" href="tel:17"><b>17</b><span>Police</span></a>
+    <a class="num" href="tel:196"><b>196</b><span>Mer</span></a>
+  </div>
+  <a class="btn large" href="sms:114">SMS au 114 · si tu ne peux pas parler</a>
+
+  <div class="carte">
+    <div class="k">Prévenir mes proches</div>
+    <div id="smsProches" class="stack"></div>
+  </div>
+
+  <div class="k section">Se faire voir et entendre</div>
+  <div class="grille2">
+    <button class="tuile signal" data-lum="sos"><b>SOS lumineux</b><span>Morse · · · — — — · · ·</span></button>
+    <button class="tuile signal" data-lum="montagne"><b>Signal montagne</b><span>6 éclats / minute</span></button>
+    <button class="tuile" data-lum="lampe"><b>Lampe</b><span>Écran blanc</span></button>
+    <button class="tuile" data-lum="rouge"><b>Lampe rouge</b><span>Garde la vision de nuit</span></button>
+    <button class="tuile" id="btnSifflet"><b>Sifflet</b><span>3 coups · détresse</span></button>
+    <button class="tuile" id="btnVoix"><b>Message vocal</b><span id="voixEtat">Enregistrer, puis répéter fort</span></button>
+  </div>
+  <div class="carte row">
+    <div><b>Détection de chute</b><div class="meta">Alarme si chute puis immobilité</div></div>
+    <button class="switch" id="btnChute" aria-pressed="false"></button>
+  </div>
+</section>
+
+<!-- GUIDE -->
+<section id="v-guide" class="vue">
+  <div class="ask">
+    <input id="question" type="search" placeholder="Pose ta question… ex : je me suis coupé" autocomplete="off">
+    <button class="btn primaire" id="btnDemander">Demander</button>
+  </div>
+  <div class="carte ia" id="iaCarte">
+    <div class="row"><div><b>Assistant IA hors ligne</b><div class="meta" id="iaEtat">Répond à partir du guide, sans internet</div></div>
+    <button class="btn petit" id="btnIA">Installer</button></div>
+    <div class="progress" id="iaProg" hidden><div></div></div>
+  </div>
+  <div id="reponse" class="carte reponse" hidden></div>
+  <div class="chips" id="cats"></div>
+  <ul class="fiches" id="fiches"></ul>
+</section>
+
+<!-- MOI -->
+<section id="v-moi" class="vue">
+  <div class="carte">
+    <div class="k">Je suis</div>
+    <div class="chips" id="profils"></div>
+  </div>
+
+  <div class="carte">
+    <div class="k">Plan de sortie</div>
+    <p class="meta">Avant de partir, envoie ton itinéraire à un proche. C'est ce qui sauve le plus de vies.</p>
+    <label>Itinéraire<input id="planIti" placeholder="ex : Lac Blanc depuis Chamonix par le GR"></label>
+    <label>Retour prévu<input id="planRetour" type="time"></label>
+    <div id="planBtns" class="stack"></div>
+  </div>
+
+  <div class="carte">
+    <div class="k">Fiche médicale</div>
+    <label>Nom<input data-fiche="nom"></label>
+    <label>Surnom visible par les Repère proches (4 lettres)<input data-fiche="surnom" maxlength="4" placeholder="AZIZ" style="text-transform:uppercase"></label>
+    <div class="grille2"><label>Groupe sanguin<input data-fiche="sang" placeholder="O+"></label><label>Né(e) le<input data-fiche="naissance" type="date"></label></div>
+    <label>Allergies<input data-fiche="allergies"></label>
+    <label>Traitements<input data-fiche="traitements"></label>
+    <label>Ambassade / infos voyage<input data-fiche="voyage"></label>
+    <button class="btn" id="btnFond">Créer le fond d'écran de secours</button>
+  </div>
+
+  <div class="carte">
+    <div class="k">Contacts d'urgence</div>
+    <div id="contacts"></div>
+    <button class="btn petit" id="btnContact">+ Ajouter un contact</button>
+  </div>
+
+  <div class="carte">
+    <div class="row"><div class="k">Mon sac</div><span class="meta" id="sacScore"></span></div>
+    <ul class="check" id="sac"></ul>
+  </div>
+
+  <div class="carte row">
+    <div><b>Mode nuit rouge</b><div class="meta">Tout l'écran en rouge, pour ne pas t'éblouir</div></div>
+    <button class="switch" id="btnRouge" aria-pressed="false"></button>
+  </div>
+  <p class="credits">Données : communes © État français (geo.api.gouv.fr) · refuges et points d'eau © refuges.info (CC BY-SA) · hôpitaux © contributeurs OpenStreetMap (ODbL) · Repère ne remplace pas les secours ni une formation.</p>
+</section>
+</main>
+
+<nav class="tabs">
+  <button data-vue="situation" class="active"><svg><use href="#i-pos"/></svg>Situation</button>
+  <button data-vue="boussole"><svg><use href="#i-comp"/></svg>Boussole</button>
+  <button data-vue="sos" class="tab-sos"><span><svg><use href="#i-sos"/></svg></span>SOS</button>
+  <button data-vue="guide"><svg><use href="#i-book"/></svg>Guide</button>
+  <button data-vue="moi"><svg><use href="#i-moi"/></svg>Moi</button>
+</nav>
+
+<div id="lum" class="lum" hidden><div class="lum-txt" id="lumTxt"></div><button id="lumStop">Appuie pour arrêter</button></div>
+<dialog id="modal"><div id="modalBody"></div><button class="btn" id="modalFermer">Fermer</button></dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
