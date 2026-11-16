@@ -679,9 +679,60 @@ const appliquerTheme = () => { document.documentElement.dataset.theme = S.theme;
 $('#btnRouge').onclick = () => { S.theme = S.theme === 'rouge' ? '' : 'rouge'; save(); appliquerTheme(); };
 appliquerTheme();
 
-// ---------- Repère à proximité (Bluetooth, application Android) ----------
+// ---------- Repère à proximité : Bluetooth (application Android) ou réseau cellulaire (version web, iPhone) ----------
+// Par le réseau, les positions passent par le relais public ntfy.sh, chiffrées avec le code du groupe :
+// le relais ne voit qu'un message illisible. ponytail: relais gratuit à débit limité, serveur ntfy à soi si l'app grossit.
+const RELAIS = 'https://ntfy.sh/';
+const b64 = u => btoa(String.fromCharCode(...u)), deb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+function proxiReseau() {
+  const ecoute = {}, enc = new TextEncoder();
+  let es = null, cle = null, sujet = null, derniere = 0, derniereCharge = null, attente = null;
+  const emettre = (nom, v) => ecoute[nom]?.(v);
+  async function envoyer(c) {
+    derniereCharge = c; attente = null; derniere = Date.now();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ch = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cle, enc.encode(JSON.stringify(c))));
+    fetch(RELAIS + sujet, { method: 'POST', body: b64(iv) + '.' + b64(ch) })
+      .then(r => { if (!r.ok) emettre('etat', { erreur: r.status === 429 ? 'Relais saturé : nouvel essai bientôt' : 'Relais indisponible' }); })
+      .catch(() => { attente = c; emettre('etat', { erreur: 'Pas de réseau : position en attente' }); });
+  }
+  // Toutes les 15 s : envoie si on a bougé (au plus toutes les 2 min), sinon un signe de vie toutes les 10 min
+  setInterval(() => {
+    if (!es) return;
+    const dt = Date.now() - derniere;
+    if ((attente && dt > 120000) || dt > 600000) envoyer(attente || derniereCharge);
+  }, 15000);
+  return {
+    addListener: (nom, f) => { ecoute[nom] = f; },
+    async demarrer(c, code) {
+      const h = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode('sujet:' + code)));
+      sujet = 'repere-' + [...h.slice(0, 12)].map(x => x.toString(16).padStart(2, '0')).join('');
+      const base = await crypto.subtle.importKey('raw', enc.encode(code), 'PBKDF2', false, ['deriveKey']);
+      cle = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: enc.encode('repere-groupe'), iterations: 100000, hash: 'SHA-256' },
+        base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      es = new EventSource(RELAIS + sujet + '/sse?since=15m');
+      es.onopen = () => emettre('etat', { erreur: '● Groupe connecté · réseau' });
+      es.onerror = () => emettre('etat', { erreur: 'Réseau coupé : reconnexion…' });
+      es.onmessage = async e => {
+        try {
+          const m = JSON.parse(e.data);
+          if (m.event !== 'message') return;
+          const [iv, ch] = m.message.split('.').map(deb64);
+          const v = JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cle, ch)));
+          if (typeof v.id === 'number') emettre('trouve', { ...v, reseau: true, vu: m.time * 1000 });
+        } catch {} // message d'un autre groupe ou abîmé
+      };
+      await envoyer(c);
+      return { emission: true };
+    },
+    maj(c, force) { if (force) envoyer(c); else attente = c; },
+    async arreter() { es?.close(); es = null; },
+  };
+}
 const NATIF = window.Capacitor?.isNativePlatform?.();
-const Proxi = NATIF ? window.Capacitor.registerPlugin('Proximite') : null;
+const Proxi = NATIF ? window.Capacitor.registerPlugin('Proximite') : proxiReseau();
+const ETAT0 = NATIF ? 'Sans réseau · Bluetooth' : 'Par le réseau · code de groupe';
+$('#proxiEtat').textContent = ETAT0;
 const TX_1M = -59, N_ENV = 2.5; // ponytail: estimation de distance par le signal, à calibrer en vrai (forêt ≈ 3, terrain dégagé ≈ 2)
 S.idProxi ??= Math.floor(Math.random() * 65536); save();
 let proxiOn = false, proxiSos = false, voisins = new Map(), alertesVues = new Set(), proxiDernierePos = null;
@@ -692,13 +743,10 @@ const chargeProxi = () => ({
   ...(pos ? { lat: ici()[0], lon: ici()[1] } : {}),
 });
 
-if (!NATIF) {
-  $('#btnProxi').disabled = true;
-  $('#proxiListe').innerHTML = '<li class="meta">Disponible dans l\'application Android installée : les téléphones se repèrent en Bluetooth, jusqu\'à environ 100 m, sans réseau.</li>';
-} else {
+{
   Proxi.addListener('trouve', v => {
     if (v.id === S.idProxi) return;
-    voisins.set(v.id, { ...v, vu: Date.now() });
+    voisins.set(v.id, { ...v, vu: v.vu ?? Date.now() });
     if (v.statut === 1 && !alertesVues.has(v.id)) {
       alertesVues.add(v.id); navigator.vibrate?.([400, 150, 400, 150, 400]); bip(500, 1800);
       popup(`<div class="k">Alerte à proximité</div><h2>${esc(v.nom || 'Quelqu\'un')} demande de l'aide</h2><p>${decrireVoisin(v)}</p><p class="note">Approche-toi prudemment, appelle le 112 si tu peux, et donne ses coordonnées.</p>`);
@@ -707,6 +755,7 @@ if (!NATIF) {
   });
   Proxi.addListener('etat', e => { $('#proxiEtat').textContent = e.erreur; });
   setInterval(majVoisins, 5000);
+  setTimeout(majVoisins);
 }
 
 function decrireVoisin(v) {
@@ -714,20 +763,27 @@ function decrireVoisin(v) {
     const d = distance(ici(), [v.lat, v.lon]), cap = bearing(ici(), [v.lat, v.lon]);
     return `${fmtDist(d)} · ${cardinal(cap)} (${Math.round(cap)}°) · position GPS ${v.lat.toFixed(4)}, ${v.lon.toFixed(4)}`;
   }
+  if (v.rssi == null) return 'position GPS pas encore connue';
   const d = 10 ** ((TX_1M - v.rssi) / (10 * N_ENV));
   return `environ ${fmtDist(d)} (selon le signal)`;
 }
 
 function majVoisins() {
   const now = Date.now();
-  for (const [id, v] of voisins) if (now - v.vu > 30000) voisins.delete(id);
-  const liste = [...voisins.values()].sort((a, b) => b.statut - a.statut || b.rssi - a.rssi);
+  for (const [id, v] of voisins) if (now - v.vu > (v.reseau ? 900000 : 30000)) voisins.delete(id);
+  const loin = v => v.lat != null && pos ? distance(ici(), [v.lat, v.lon]) : -(v.rssi ?? -999);
+  const liste = [...voisins.values()].sort((a, b) => b.statut - a.statut || loin(a) - loin(b));
   $('#proxiListe').innerHTML = liste.length ? liste.map(v => {
     const cap = v.lat != null && pos ? bearing(ici(), [v.lat, v.lon]) : null;
     return `<li class="${v.statut === 1 ? 'alerte' : ''}"><span class="pastille">${v.statut === 1 ? 'SOS' : esc((v.nom || '?').slice(0, 2))}</span>
       <span class="nom"><b>${esc(v.nom || 'Anonyme')}${v.statut === 1 ? ' · demande de l\'aide' : ''}</b><span>${decrireVoisin(v)}</span></span>
-      <span class="dist">${cap != null ? `<svg data-cap="${cap}" style="transform:rotate(${cap - (heading ?? 0)}deg)"><use href="#i-fleche"/></svg>` : ''}<br><small class="meta">il y a ${Math.round((now - v.vu) / 1000)} s</small></span></li>`;
-  }).join('') : `<li class="meta">${proxiOn ? 'Recherche… Les autres doivent avoir Repère ouvert avec « Repérer les autres » activé.' : 'Personne pour l\'instant.'}</li>`;
+      <span class="dist">${cap != null ? `<svg data-cap="${cap}" style="transform:rotate(${cap - (heading ?? 0)}deg)"><use href="#i-fleche"/></svg>` : ''}<br><small class="meta">il y a ${depuis(now - v.vu)}</small></span></li>`;
+  }).join('') : `<li class="meta">${proxiOn ? `Recherche… Les autres doivent avoir Repère ouvert avec « Repérer les autres » activé${NATIF ? '' : ' et le même code de groupe'}.`
+    : NATIF ? 'Personne pour l\'instant.' : 'Avec les données cellulaires : choisis un code de groupe et donne-le à tes proches. Vous vous voyez à n\'importe quelle distance, positions chiffrées.'}</li>`;
+}
+function depuis(ms) {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? s + ' s' : s < 3600 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' h';
 }
 
 $('#btnProxi').onclick = async () => {
@@ -735,27 +791,57 @@ $('#btnProxi').onclick = async () => {
   if (proxiOn) {
     await Proxi.arreter(); proxiOn = false; proxiSos = false; voisins.clear();
     b.textContent = 'Repérer les autres'; b.classList.add('primaire'); $('#btnProxiSos').disabled = true; $('#btnProxiSos').classList.remove('sos-on');
-    $('#proxiEtat').textContent = 'Sans réseau · Bluetooth'; majVoisins(); return;
+    $('#proxiEtat').textContent = ETAT0; majVoisins(); return;
+  }
+  if (!NATIF) {
+    const code = prompt('Code du groupe (6 caractères minimum). Donne le même code à tes proches : seuls ceux qui l\'ont te voient.', S.groupe || '');
+    if (!code || code.trim().length < 6) return code != null && popup('<h2>Code trop court</h2><p>Choisis au moins 6 caractères, par exemple « aziz2026 ».</p>');
+    S.groupe = code.trim().toLowerCase(); save();
   }
   if (!watchId) demarrerGps();
   try {
-    const r = await Proxi.demarrer(chargeProxi());
+    const r = await Proxi.demarrer(chargeProxi(), S.groupe);
     proxiOn = true; b.textContent = 'Arrêter'; b.classList.remove('primaire'); $('#btnProxiSos').disabled = false;
     $('#proxiEtat').textContent = r.emission ? '● Visible et à l\'écoute' : '● À l\'écoute (ce téléphone ne peut pas émettre)';
     majVoisins();
-  } catch (e) { popup(`<h2>Bluetooth</h2><p>${esc(e.message || e)}</p>`); }
+  } catch (e) { popup(`<h2>${NATIF ? 'Bluetooth' : 'Réseau'}</h2><p>${esc(e.message || e)}</p>`); }
 };
 $('#btnProxiSos').onclick = () => {
   proxiSos = !proxiSos;
   $('#btnProxiSos').classList.toggle('sos-on', proxiSos);
   $('#btnProxiSos').textContent = proxiSos ? 'SOS envoyé · arrêter' : 'Envoyer un SOS';
-  Proxi.maj(chargeProxi());
+  Proxi.maj(chargeProxi(), true);
 };
 // Position partagée : mise à jour quand on a bougé de plus de 20 m
 setInterval(() => {
   if (!proxiOn || !pos) return;
   if (!proxiDernierePos || distance(proxiDernierePos, ici()) > 20) { proxiDernierePos = ici(); Proxi.maj(chargeProxi()); }
 }, 15000);
+
+// ---------- Radio en direct (Radio France, par les données cellulaires) ----------
+// Qualité basse (32 kbit/s ≈ 15 Mo/h) : passe même avec une barre de réseau et ménage le forfait.
+const RADIOS = { franceinfo: 'franceinfo', franceinter: 'France Inter', fip: 'FIP', franceculture: 'France Culture', mouv: 'Mouv\'', francemusique: 'France Musique' };
+const lecteur = new Audio();
+let radioOn = null;
+$('#radios').innerHTML = Object.entries(RADIOS).map(([k, v]) => `<button class="chip" data-r="${k}">${v}</button>`).join('');
+function majRadio(t) {
+  $$('#radios .chip').forEach(c => c.classList.toggle('on', c.dataset.r === radioOn));
+  $('#radioEtat').textContent = t || (radioOn ? '● En direct · ~15 Mo/h' : 'Par les données cellulaires');
+}
+$('#radios').onclick = e => {
+  const b = e.target.closest('[data-r]'); if (!b) return;
+  if (radioOn === b.dataset.r) { radioOn = null; lecteur.pause(); lecteur.removeAttribute('src'); }
+  else {
+    radioOn = b.dataset.r;
+    lecteur.src = `https://icecast.radiofrance.fr/${radioOn}-lofi.mp3`;
+    lecteur.play().catch(() => majRadio('Lecture refusée : touche à nouveau la station'));
+    if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: RADIOS[radioOn], artist: 'Repère · radio' });
+  }
+  majRadio();
+};
+lecteur.onwaiting = () => radioOn && majRadio('Chargement…');
+lecteur.onplaying = () => majRadio();
+lecteur.onerror = () => radioOn && majRadio('Pas de réseau : radio indisponible');
 
 // ---------- Mode survie : Repère prend les choses en main ----------
 let survie = false, coachT = 0, derniereGorgee = Date.now(), refusConsignes = new Set();
