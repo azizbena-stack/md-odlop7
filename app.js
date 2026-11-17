@@ -748,8 +748,9 @@ $('#btnDemander').onclick = async () => {
   const f = sources[0];
   const base = f ? `${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 900)}` : '(aucune fiche)';
   const msgs = [
-    { role: 'system', content: `Tu es Repère, assistant de survie. Réponds en français, en tutoyant, en 3 à 5 étapes courtes. Utilise seulement la fiche. Danger de mort : commence par « Appelle le 112 ». N'invente ni plante ni dosage.\n${contexteSituation()}\n\nFiche : ${base}` },
-    { role: 'user', content: q },
+    // ponytail: consignes réduites au minimum, le petit modèle (0,5B) recopie mot pour mot les règles qu'on lui donne
+    { role: 'system', content: 'Tu es un guide de survie. Réponds en français par 3 à 5 étapes numérotées, d\'après la fiche.' },
+    { role: 'user', content: `Fiche :\n${base}\n\n${contexteSituation()}\n\nQuestion : ${q}` },
   ];
   // Les fiches s'affichent tout de suite, la réponse de l'IA s'écrit au-dessus au fur et à mesure
   rep.innerHTML = `<div id="iaTexte" class="meta">Repère lit la fiche…</div>${liens}`;
