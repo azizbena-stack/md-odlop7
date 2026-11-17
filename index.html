@@ -126,11 +126,17 @@
       <div><b id="navConsigne"></b><small id="navDist"></small></div>
       <button id="navStop" aria-label="Arrêter le guidage">✕</button>
     </div>
-    <div class="plan-btns">
-      <button id="btn3D" class="plan-btn" aria-label="Vue en 3D">3D</button>
-      <button id="btnRelief" class="plan-btn" aria-label="Ombrage du relief">Relief</button>
-      <button id="btnCentrer" class="plan-btn" aria-label="Me recentrer"><svg><use href="#i-pos"/></svg></button>
-      <button id="btnPlein" class="plan-btn" aria-label="Carte en plein écran">⤢</button>
+    <div class="plan-bas">
+      <div class="plan-btns">
+        <button id="btn3D" class="plan-btn" aria-label="Vue en 3D">3D</button>
+        <button id="btnRelief" class="plan-btn" aria-label="Ombrage du relief">Relief</button>
+        <button id="btnCentrer" class="plan-btn" aria-label="Me recentrer"><svg><use href="#i-pos"/></svg></button>
+        <button id="btnPlein" class="plan-btn" aria-label="Carte en plein écran">⤢</button>
+      </div>
+      <div class="iti-choix" id="itiChoix" hidden>
+        <div id="itiListe"></div>
+        <div class="iti-actions"><button class="btn" id="itiFermer">Fermer</button><button class="btn primaire" id="itiGo">Y aller</button></div>
+      </div>
     </div>
   </div>
   <div class="carte">

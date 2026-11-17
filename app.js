@@ -403,12 +403,14 @@ const MODES = { foot: ['routed-foot', 'à pied'], bike: ['routed-bike', 'à vél
 let plan = null, moiMk = null, destMk = null, ptsMk = [], suivre = true, en3D = false;
 let destination = S.route?.dest || null, modeIti = S.route?.mode || 'foot';
 const lnglat = ([la, lo]) => [lo, la];
-const geoRoute = R => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: (R?.geo || []).map(lnglat) } });
+// Itinéraires : le choisi en violet foncé, les autres en violet clair (cachés pendant le guidage)
+const geoRoute = R => ({ type: 'FeatureCollection', features: !R ? [] : (guidage || !R.alts ? [{ geo: R.geo, i: R.choix || 0 }] : R.alts.map((a, i) => ({ geo: a.geo, i })))
+  .map(a => ({ type: 'Feature', properties: { i: a.i, sel: a.i === (R.choix || 0) }, geometry: { type: 'LineString', coordinates: a.geo.map(lnglat) } })) });
 function marqueur(ll, cls, html = '', anchor = 'center') {
   const el = document.createElement('div'); el.className = cls; el.innerHTML = html;
   return new maplibregl.Marker({ element: el, anchor }).setLngLat(lnglat(ll)).addTo(plan);
 }
-const marqueurDest = ll => marqueur(ll, 'plan-cible', '<div class="plan-dest"></div>', 'bottom');
+const marqueurDest = ll => marqueur(ll, 'plan-cible', '<div class="plan-dest-arrivee"></div>');
 
 function initPlan() {
   if (!window.maplibregl) return $('#itiRes').textContent = 'La carte n\'a pas pu se charger.';
@@ -428,6 +430,9 @@ function initPlan() {
     // restaurants, hôpitaux (la classe « hospital » d'OpenMapTiles comprend les cliniques)
     // Ciel peint (sinon transparent = bande grise au-dessus de l'horizon en vue inclinée) : la carte remplit tout l'écran
     plan.setSky({ 'sky-color': '#BFDDF5', 'horizon-color': '#EEF3F6', 'fog-color': '#F2EFE9', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.6 });
+    // Fond plus clair et eau plus bleue, façon GPS de voiture (2D comme 3D)
+    plan.getLayer('background') && plan.setPaintProperty('background', 'background-color', '#F4F2EE');
+    plan.getLayer('water') && plan.setPaintProperty('water', 'fill-color', '#9DCFF2');
     ['building', 'building-3d', 'poi_transit'].forEach(id => plan.getLayer(id) && plan.setLayoutProperty(id, 'visibility', 'none'));
     ['poi_r1', 'poi_r7', 'poi_r20'].forEach(id => {
       if (!plan.getLayer(id)) return;
@@ -439,12 +444,20 @@ function initPlan() {
     plan.addSource('dem-ombre', src); // MapLibre conseille une source à part pour l'ombrage
     plan.addLayer({ id: 'ombrage', type: 'hillshade', source: 'dem-ombre', layout: { visibility: S.relief === false ? 'none' : 'visible' }, paint: { 'hillshade-exaggeration': .35 } }, 'aeroway_fill');
     plan.addSource('route', { type: 'geojson', data: geoRoute(null) });
-    plan.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#007AFF', 'line-width': 6, 'line-opacity': .85 } });
+    const rond = { 'line-cap': 'round', 'line-join': 'round' }, largeur = (a, b) => ['interpolate', ['linear'], ['zoom'], 8, a, 16, b];
+    plan.addLayer({ id: 'route-alt', type: 'line', source: 'route', filter: ['!=', ['get', 'sel'], true], layout: rond, paint: { 'line-color': '#C3A6F7', 'line-width': largeur(5, 10) } });
+    plan.addLayer({ id: 'route-bord', type: 'line', source: 'route', filter: ['==', ['get', 'sel'], true], layout: rond, paint: { 'line-color': '#3B0E9E', 'line-width': largeur(8, 15) } });
+    plan.addLayer({ id: 'route', type: 'line', source: 'route', filter: ['==', ['get', 'sel'], true], layout: rond, paint: { 'line-color': '#7B2FF7', 'line-width': largeur(5, 10) } });
     if (S.route) dessinerRoute(S.route, false);
     if (en3D) vue3D(true);
   });
   plan.on('error', e => console.warn('carte', e.error?.message)); // hors ligne : morceaux manquants, la carte reste utilisable
-  plan.on('click', e => { if (!e.originalEvent.target.closest?.('.maplibregl-marker')) choisirDest([e.lngLat.lat, e.lngLat.lng], 'Point sur la carte'); });
+  plan.on('click', e => {
+    if (e.originalEvent.target.closest?.('.maplibregl-marker')) return;
+    const { x, y } = e.point, alt = plan.queryRenderedFeatures([[x - 10, y - 10], [x + 10, y + 10]], { layers: ['route-alt'] })[0];
+    if (alt) return choisirIti(alt.properties.i); // toucher un autre itinéraire le choisit, comme dans les GPS
+    choisirDest([e.lngLat.lat, e.lngLat.lng], 'Point sur la carte');
+  });
   plan.on('dragstart', () => { suivre = false; });
   plan.on('moveend', majPointsPlan);
   majMoiPlan(); majPointsPlan(); majModes(); majRelief(); majZones();
@@ -488,12 +501,12 @@ function demarrerGuidage() {
   const el = document.createElement('div'); el.className = 'plan-nav';
   el.innerHTML = '<svg viewBox="0 0 40 40"><path d="M20 3 L35 35 L20 27 L5 35Z"/></svg>';
   navMk = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(lnglat(ici())).addTo(plan);
-  $('#navBandeau').hidden = false;
+  $('#navBandeau').hidden = false; $('#itiChoix').hidden = true;
   if (!$('.plan-wrap').classList.contains('plein')) $('#btnPlein').click(); // plein écran, comme un GPS de voiture
-  majGuidage();
+  dessinerRoute(S.route, false); majGuidage();
 }
 function arreterGuidage(msg) {
-  guidage = false; navMk?.remove(); navMk = null; $('#navBandeau').hidden = true;
+  guidage = false; navMk?.remove(); navMk = null; $('#navBandeau').hidden = true; if (S.route) dessinerRoute(S.route, false);
   if ($('.plan-wrap').classList.contains('plein')) $('#btnPlein').click();
   plan?.easeTo({ pitch: en3D ? 72 : 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 } });
   majMoiPlan(); if (msg) $('#itiRes').textContent = msg;
@@ -519,7 +532,7 @@ function majGuidage() {
   const idx = p => R.geo.reduce((b, q, i) => distance(p, q) < distance(p, R.geo[b]) ? i : b, 0);
   const prochaine = (R.etapes || []).filter(e => e[2]).map(e => ({ t: e[0], i: idx(e[2]), ll: e[2] })).find(e => e.i > i0);
   const dEtape = prochaine ? cumul[prochaine.i] - cumul[i0] + dmin : fin;
-  $('#navConsigne').textContent = dmin > 60 ? 'Tu t\'écartes de l\'itinéraire : rejoins la ligne bleue' : prochaine ? prochaine.t : 'Tout droit jusqu\'à l\'arrivée';
+  $('#navConsigne').textContent = dmin > 60 ? 'Tu t\'écartes de l\'itinéraire : rejoins la ligne violette' : prochaine ? prochaine.t : 'Tout droit jusqu\'à l\'arrivée';
   $('#navDist').textContent = `Dans ${fmtDist(dEtape)} · arrivée à ${fmtDist(fin)}`;
   if (suivre) plan.easeTo({ center: lnglat(me), bearing: cap, pitch: 70, zoom: 17, duration: 900,
     padding: { top: Math.round(plan.getContainer().clientHeight * .45), bottom: 0, left: 0, right: 0 } });
@@ -676,16 +689,28 @@ async function calculerIti() {
   $('#itiRes').textContent = `Calcul de l'itinéraire ${MODES[modeIti][1]} vers ${destination.nom}…`;
   $('#btnItiBoussole').hidden = false;
   try {
-    const u = `https://routing.openstreetmap.de/${MODES[modeIti][0]}/route/v1/driving/${dep[1]},${dep[0]};${destination.ll[1]},${destination.ll[0]}?overview=full&geometries=geojson&steps=true`;
-    const r = await fetch(u).then(r => r.json());
-    if (r.code !== 'Ok' || !r.routes?.length) throw new Error(r.message || 'aucun chemin trouvé');
-    const rt = r.routes[0];
-    S.route = {
-      dest: destination, mode: modeIti, d: rt.distance, t: rt.duration,
+    // Le serveur gratuit ne propose qu'un trajet : on en demande deux autres qui passent par un point à gauche
+    // et à droite de la ligne droite, et on garde ceux qui sont vraiment différents et pas trop longs (comme un GPS)
+    // ponytail: variantes par point de passage, pas de vrais « alternatives » ; un serveur OSRM à nous si ça ne suffit pas
+    const [la1, lo1] = dep, [la2, lo2] = destination.ll, ml = (la1 + la2) / 2, c = Math.cos(ml * Math.PI / 180);
+    const cote = k => [ml + k * .3 * (lo2 - lo1) * c, (lo1 + lo2) / 2 - k * .3 * (la2 - la1) / c];
+    const url = pts => `https://routing.openstreetmap.de/${MODES[modeIti][0]}/route/v1/driving/${pts.map(p => `${p[1]},${p[0]}`).join(';')}?overview=full&geometries=geojson&steps=true&continue_straight=true`;
+    const lire = r => r?.code === 'Ok' && r.routes?.[0] ? r.routes[0] : null;
+    const [r0, ...rv] = await Promise.all([[dep, destination.ll], [dep, cote(1), destination.ll], [dep, cote(-1), destination.ll]]
+      .map(pts => fetch(url(pts)).then(r => r.json()).catch(() => null)));
+    if (!lire(r0)) throw new Error(r0?.message || 'aucun chemin trouvé');
+    const enAlt = rt => ({
+      d: rt.distance, t: rt.duration, via: [...new Set(rt.legs.flatMap(l => l.summary.split(', ')).filter(Boolean))].slice(0, 2).join(', '),
       geo: rt.geometry.coordinates.map(([lo, la]) => [+la.toFixed(5), +lo.toFixed(5)]),
-      etapes: rt.legs[0].steps.map(s => [consigne(s), Math.round(s.distance), [+s.maneuver.location[1].toFixed(5), +s.maneuver.location[0].toFixed(5)]]),
-    };
-    save(); dessinerRoute(S.route, !pos); if (pos) demarrerGuidage();
+      etapes: rt.legs.flatMap((l, k) => l.steps.filter(s => !(s.maneuver.type === 'arrive' && k < rt.legs.length - 1) && !(s.maneuver.type === 'depart' && k > 0)))
+        .map(s => [consigne(s), Math.round(s.distance), [+s.maneuver.location[1].toFixed(5), +s.maneuver.location[0].toFixed(5)]]),
+    });
+    const alts = [enAlt(lire(r0))];
+    const commun = (a, b) => { let n = 0, k = 0; for (; k < a.length; k += 5) if (b.some((q, j) => j % 3 === 0 && distance(a[k], q) < 40)) n++; return n / Math.ceil(a.length / 5); };
+    rv.map(lire).filter(Boolean).map(enAlt).sort((a, b) => a.t - b.t)
+      .forEach(a => { if (a.t < alts[0].t * 1.5 && alts.every(b => commun(a.geo, b.geo) < .8)) alts.push(a); });
+    S.route = { dest: destination, mode: modeIti, alts, choix: 0, ...alts[0] };
+    save(); proposerItis(); dessinerRoute(S.route, true);
   } catch (e) {
     const d = distance(dep, destination.ll);
     $('#itiRes').innerHTML = (navigator.onLine ? `Itinéraire impossible (${esc(e.message)}).` : 'Pas de réseau : l\'itinéraire se calcule en ligne.')
@@ -699,8 +724,48 @@ function dessinerRoute(R, cadrer) {
   if (!plan?.getSource('route')) return; // la carte n'est pas prête : elle dessinera S.route en se chargeant
   plan.getSource('route').setData(geoRoute(R));
   destMk?.remove(); destMk = marqueurDest(R.dest.ll);
-  if (cadrer) { suivre = false; const b = new maplibregl.LngLatBounds(); R.geo.forEach(p => b.extend(lnglat(p))); plan.fitBounds(b, { padding: 40 }); }
+  majBulles(R);
+  if (cadrer) {
+    suivre = false; const b = new maplibregl.LngLatBounds(); (R.alts || [R]).forEach(a => a.geo.forEach(p => b.extend(lnglat(p))));
+    const bas = $('#itiChoix').hidden ? 40 : $('#itiChoix').offsetHeight + 50;
+    plan.fitBounds(b, { padding: { top: 50, bottom: Math.min(bas, plan.getContainer().clientHeight * .6), left: 30, right: 70 }, duration: 0 });
+  }
 }
+// Bulles de durée posées sur chaque itinéraire, à l'endroit où il s'écarte le plus de l'autre
+let bulles = [];
+const pointEcarte = (a, b) => { let best = a[a.length >> 1], dm = -1;
+  for (let k = 0; k < a.length; k += 6) { let m = Infinity; for (let j = 0; j < b.length; j += 6) m = Math.min(m, distance(a[k], b[j])); if (m > dm) { dm = m; best = a[k]; } }
+  return best; };
+function majBulles(R) {
+  bulles.forEach(m => m.remove()); bulles = [];
+  if (!plan || guidage || !(R?.alts?.length > 1)) return;
+  R.alts.forEach((a, i) => {
+    const el = document.createElement('div'); el.className = 'iti-bulle' + (i === R.choix ? ' on' : '');
+    el.innerHTML = duree(a.t * 1000) + (i === 0 ? '<small>Le plus rapide</small>' : '');
+    el.onclick = ev => { ev.stopPropagation(); choisirIti(i); };
+    bulles.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(lnglat(pointEcarte(a.geo, R.alts[i ? 0 : 1].geo))).addTo(plan));
+  });
+}
+function choisirIti(i) {
+  const R = S.route; if (!R?.alts?.[i] || guidage) return;
+  Object.assign(R, R.alts[i], { choix: i }); save(); dessinerRoute(R, false);
+  if (!$('#itiChoix').hidden) proposerItis();
+}
+// Feuille du bas : les itinéraires (durée, distance, par où), puis « Y aller »
+function proposerItis() {
+  const R = S.route; if (!R?.alts) return;
+  $('#itiListe').innerHTML = R.alts.map((a, i) => `<button class="iti-option${i === R.choix ? ' on' : ''}" data-iti="${i}">
+    <span><b>${duree(a.t * 1000)}</b><small>${a.via ? 'Via ' + esc(a.via) : MODES[R.mode][1]}${i === 0 && R.alts.length > 1 ? ' · le plus rapide' : ''}</small></span><small>${fmtDist(a.d)}</small></button>`).join('');
+  $('#itiGo').textContent = pos ? 'Y aller' : 'Activer le GPS';
+  $('#itiChoix').hidden = false;
+  if (!$('.plan-wrap').classList.contains('plein')) $('#btnPlein').click();
+}
+$('#itiListe').onclick = e => { const b = e.target.closest('[data-iti]'); if (b) choisirIti(+b.dataset.iti); };
+$('#itiGo').onclick = () => {
+  if (!pos) { $('#btnGps')?.click(); $('#itiGo').textContent = 'Recherche du GPS… puis touche ici'; return; }
+  $('#itiChoix').hidden = true; demarrerGuidage();
+};
+$('#itiFermer').onclick = () => { $('#itiChoix').hidden = true; };
 // Sans réseau : la destination devient un point suivi par la flèche de la boussole
 $('#btnItiBoussole').onclick = () => {
   if (!destination) return;
