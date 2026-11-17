@@ -424,6 +424,14 @@ function initPlan() {
       La boussole et l'itinéraire restent disponibles ici.</div>`;
   }
   plan.on('load', () => {
+    // Carte épurée (demande d'Aziz) : pas de bâtiments ni d'arrêts de transport ; seuls points affichés : essence, hôtels,
+    // restaurants, hôpitaux (la classe « hospital » d'OpenMapTiles comprend les cliniques)
+    ['building', 'building-3d', 'poi_transit'].forEach(id => plan.getLayer(id) && plan.setLayoutProperty(id, 'visibility', 'none'));
+    ['poi_r1', 'poi_r7', 'poi_r20'].forEach(id => {
+      if (!plan.getLayer(id)) return;
+      plan.setFilter(id, ['all', plan.getFilter(id), ['match', ['get', 'class'], ['fuel', 'lodging', 'restaurant', 'fast_food', 'hospital'], true, false]]);
+      plan.setLayerZoomRange(id, 13, 24); // ils sont peu nombreux : on peut les montrer plus tôt
+    });
     const src = { type: 'raster-dem', tiles: [DEM], encoding: 'terrarium', tileSize: 256, maxzoom: 12 };
     plan.addSource('dem', { ...src, attribution: 'Relief © Mapzen, AWS Terrain Tiles' });
     plan.addSource('dem-ombre', src); // MapLibre conseille une source à part pour l'ombrage
