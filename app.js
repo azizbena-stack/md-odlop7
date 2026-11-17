@@ -1004,7 +1004,7 @@ function majProfil() {
   const items = [...SACS.base, ...(SACS[S.profil] || [])];
   $('#sac').innerHTML = items.map(i => `<li class="${S.sac.includes(i) ? 'ok' : ''}">${i}</li>`).join('');
   $('#sacScore').textContent = `${items.filter(i => S.sac.includes(i)).length} / ${items.length}`;
-  $('#merCarte').hidden = S.profil !== 'mer';
+  $('#merCarte').hidden = $('#sosMer').hidden = S.profil !== 'mer'; // Homme à la mer : seulement avec le profil Marin
 }
 $('#profils').onclick = e => { const b = e.target.closest('[data-p]'); if (!b) return; S.profil = b.dataset.p; save(); majProfil(); if (pos) { majSituation(); majMer(); } };
 $('#sac').onclick = e => { const li = e.target.closest('li'); if (!li) return; const i = li.textContent; S.sac = S.sac.includes(i) ? S.sac.filter(x => x !== i) : [...S.sac, i]; save(); majProfil(); };
