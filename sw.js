@@ -1,5 +1,5 @@
 // Hors ligne : tout est mis en cache à l'installation, puis servi sans réseau.
-const V = 'repere-v10', TUILES = 'repere-tuiles', ZONES = 'repere-zones';
+const V = 'repere-v11', TUILES = 'repere-tuiles', ZONES = 'repere-zones';
 const FICHIERS = ['./', 'index.html', 'style.css', 'app.js', 'geo.js', 'guide.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'data/communes.json', 'data/points.json', 'data/wiki.json', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css', 'vendor/wllama.js', 'vendor/wllama.wasm', 'vendor/wllama-mt.wasm'];
 // La météo (api.open-meteo.com) n'est pas mise en cache ici : l'app la garde elle-même dans le téléphone.
@@ -10,13 +10,13 @@ self.addEventListener('activate', e => e.waitUntil(
 
 // Isolation cross-origin (COOP/COEP) ajoutée par le service worker, GitHub Pages ne sachant pas le faire :
 // elle débloque l'IA sur plusieurs cœurs (SharedArrayBuffer). « credentialless » laisse passer les contenus des autres sites ;
-// Safari ne le connaît pas, il reçoit « require-corp » (les autres sites doivent alors autoriser Repère : radio Europe 1 refusée).
+// Safari ne le connaît pas et « require-corp » y laissait la carte grise (morceaux de carte bloqués) : pas d'isolation sur Safari (IA sur 1 cœur).
 const SAFARI = /Safari/.test(navigator.userAgent) && !/Chrome|Chromium|CriOS|FxiOS|Android|Edg/.test(navigator.userAgent);
 const isoler = res => {
-  if (!res || res.type === 'opaque' || res.status === 0) return res;
+  if (SAFARI || !res || res.type === 'opaque' || res.status === 0) return res;
   const h = new Headers(res.headers);
   h.set('Cross-Origin-Opener-Policy', 'same-origin');
-  h.set('Cross-Origin-Embedder-Policy', SAFARI ? 'require-corp' : 'credentialless');
+  h.set('Cross-Origin-Embedder-Policy', 'credentialless');
   h.set('Cross-Origin-Resource-Policy', 'same-origin');
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
 };
