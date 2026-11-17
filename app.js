@@ -1043,9 +1043,9 @@ $('#btnFond').onclick = () => {
 // Thème nuit rouge
 const appliquerTheme = () => {
   document.documentElement.dataset.theme = S.theme; $('#btnRouge').setAttribute('aria-pressed', S.theme === 'rouge');
-  document.documentElement.classList.toggle('arcade', !!S.arcade); $('#btnArcade')?.setAttribute('aria-pressed', !!S.arcade);
+  document.documentElement.classList.toggle('paysage', !!S.paysage); $('#btnPaysage')?.setAttribute('aria-pressed', !!S.paysage);
 };
-$('#btnArcade') && ($('#btnArcade').onclick = () => { S.arcade = !S.arcade; save(); appliquerTheme(); });
+$('#btnPaysage') && ($('#btnPaysage').onclick = () => { S.paysage = !S.paysage; save(); appliquerTheme(); });
 $('#btnRouge').onclick = () => { S.theme = S.theme === 'rouge' ? '' : 'rouge'; save(); appliquerTheme(); };
 appliquerTheme();
 

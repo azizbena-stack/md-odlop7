@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 700" preserveAspectRatio="xMidYMax slice">
+  <!-- Décor du thème « Paysage » : lever de soleil, montagnes et forêt en couches (dessiné pour Repère) -->
+  <defs>
+    <linearGradient id="ciel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B9A7CF"/><stop offset=".38" stop-color="#E9C6C2"/><stop offset=".6" stop-color="#F8DDBE"/><stop offset=".75" stop-color="#FCEBD0"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="270" cy="430" r="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF6E3" stop-opacity=".95"/><stop offset=".25" stop-color="#FFE9C7" stop-opacity=".6"/><stop offset="1" stop-color="#FFE9C7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="brume" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6E1D3" stop-opacity="0"/><stop offset="1" stop-color="#F6E1D3" stop-opacity=".75"/></linearGradient>
+  </defs>
+  <rect width="400" height="700" fill="url(#ciel)"/>
+  <circle cx="270" cy="430" r="150" fill="url(#halo)"/>
+  <circle cx="270" cy="430" r="22" fill="#FFF8EA"/>
+  <!-- nuages -->
+  <g fill="#F3D2C6" opacity=".7">
+    <ellipse cx="90" cy="300" rx="70" ry="9"/><ellipse cx="130" cy="290" rx="40" ry="8"/>
+    <ellipse cx="330" cy="340" rx="60" ry="7"/><ellipse cx="300" cy="332" rx="30" ry="6"/>
+  </g>
+  <!-- montagnes lointaines -->
+  <path fill="#C4AEC9" d="M0 470 L40 440 L75 455 L120 410 L160 445 L200 425 L235 455 L290 405 L340 450 L370 432 L400 448 V700 H0Z"/>
+  <path fill="url(#brume)" d="M0 440 H400 V520 H0Z"/>
+  <!-- collines -->
+  <path fill="#A08FAF" d="M0 505 C40 485 70 492 105 478 C150 462 180 490 225 482 C270 474 300 452 340 470 C365 480 385 476 400 470 V700 H0Z"/>
+  <path fill="url(#brume)" opacity=".6" d="M0 480 H400 V560 H0Z"/>
+  <!-- forêt au loin -->
+  <path fill="#6E8C89" d="M0 548 q10-14 20-4 q8-16 20-6 q10-12 22-2 q9-15 22-4 q12-12 22 0 q10-16 24-5 q8-10 20-1 q11-15 24-4 q10-12 22-1 q9-14 22-3 q12-13 24 0 q10-12 20-2 q9-15 22-4 q10-11 20 0 q8-12 20-3 q10-10 20 2 V700 H0Z"/>
+  <!-- forêt proche -->
+  <path fill="#3F6B60" d="M0 590 q14-22 30-6 q10-24 30-8 q14-18 30-2 q12-22 32-6 q16-20 30 0 q12-24 32-8 q12-16 28 0 q14-22 32-6 q12-18 28-2 q14-24 32-6 q14-16 28 2 q10-20 26-8 q10-12 22 4 V700 H0Z"/>
+  <!-- premier plan sombre -->
+  <path fill="#22413B" d="M0 640 q20-26 44-8 q18-20 40-2 q22-24 46-4 q20-18 42 0 q22-26 48-6 q20-16 40 2 q22-22 46-4 q22-18 46 2 q20-14 48 4 V700 H0Z"/>
+</svg>
