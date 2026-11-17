@@ -624,8 +624,16 @@ $('#btnZoneSuppr').onclick = async () => {
 const nomCommune = c => `${c[0]} (${c[4]})`;
 // Les communes proches passent devant, puis les plus peuplées
 const rang = c => Math.log(c[3] + 1) - (pos ? distance(ici(), [c[1], c[2]]) / 30000 : 0);
+// Villes déjà cherchées : gardées dans le téléphone, en raccourcis 🔍 sous le champ et dans les suggestions
+const optionsRecents = () => (S.recents || []).map(n => `<option value="${esc(n)}">`).join('');
+function majRecents() {
+  $('#recents').innerHTML = (S.recents || []).map(n => `<button class="chip" data-recent="${esc(n)}">🔍 ${esc(n)}</button>`).join('');
+}
+majRecents();
+$('#recents').onclick = e => { const b = e.target.closest('[data-recent]'); if (b) { $('#dest').value = b.dataset.recent; $('#btnIti').click(); } };
+$('#dest').onfocus = () => { if (!$('#dest').value.trim()) $('#destListe').innerHTML = optionsRecents(); };
 $('#dest').oninput = () => {
-  const q = norm($('#dest').value.trim()); if (q.length < 2) return;
+  const q = norm($('#dest').value.trim()); if (q.length < 2) return void ($('#destListe').innerHTML = optionsRecents());
   $('#destListe').innerHTML = COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a)).slice(0, 8)
     .map(c => `<option value="${esc(nomCommune(c))}">`).join('');
 };
@@ -636,6 +644,7 @@ $('#btnIti').onclick = () => {
   const c = COMMUNES.find(c => nomCommune(c) === v) || COMMUNES.filter(c => norm(c[0]) === q).sort((a, b) => rang(b) - rang(a))[0]
     || COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a))[0];
   if (!c) return $('#itiRes').textContent = 'Commune introuvable. Vérifie l\'orthographe ou touche la carte.';
+  S.recents = [nomCommune(c), ...(S.recents || []).filter(n => n !== nomCommune(c))].slice(0, 6); save(); majRecents();
   choisirDest([c[1], c[2]], c[0]);
 };
 function majModes() { $$('#modes .chip').forEach(c => c.classList.toggle('on', c.dataset.mode === modeIti)); }
