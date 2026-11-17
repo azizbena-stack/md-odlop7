@@ -747,18 +747,16 @@ $('#btnDemander').onclick = async () => {
   // ponytail: une seule fiche coupée à 900 caractères : sur le processeur d'un téléphone, chaque mot lu coûte du temps
   const f = sources[0];
   const base = f ? `${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 900)}` : '(aucune fiche)';
-  const msgs = [
-    // ponytail: consignes réduites au minimum, le petit modèle (0,5B) recopie mot pour mot les règles qu'on lui donne
-    { role: 'system', content: 'Tu es un guide de survie. Réponds en français par 3 à 5 étapes numérotées, d\'après la fiche.' },
-    { role: 'user', content: `Fiche :\n${base}\n\n${contexteSituation()}\n\nQuestion : ${q}` },
-  ];
+  // ponytail: prompt Qwen (ChatML) écrit à la main et réponse amorcée par « 1. » : sans ça le petit modèle (0,5B)
+  // recopie les consignes ou pose des questions au lieu de donner les gestes
+  const prompt = `<|im_start|>system\nTu es un guide de survie. Tu donnes les gestes à faire, en français, en 3 à 5 étapes numérotées, d'après la fiche.<|im_end|>\n<|im_start|>user\nFiche :\n${base}\n\n${contexteSituation()}\n\nQuestion : ${q}<|im_end|>\n<|im_start|>assistant\n1.`;
   // Les fiches s'affichent tout de suite, la réponse de l'IA s'écrit au-dessus au fur et à mesure
   rep.innerHTML = `<div id="iaTexte" class="meta">Repère lit la fiche…</div>${liens}`;
   iaOccupee = true; $('#btnDemander').disabled = true;
   try {
-    await moteur.createChatCompletion(msgs, {
+    await moteur.createCompletion(prompt, {
       nPredict: 300, sampling: { temp: .3, top_p: .9, penalty_repeat: 1.1 },
-      onNewToken: (t, p, texte) => { const el = $('#iaTexte'); if (el) { el.className = ''; el.textContent = texte; } },
+      onNewToken: (t, p, texte) => { const el = $('#iaTexte'); if (el) { el.className = ''; el.textContent = '1.' + texte; } },
     });
   } catch (e) { $('#iaTexte').textContent = 'Erreur de l\'IA : ' + (e.message || e); }
   iaOccupee = false; $('#btnDemander').disabled = false;
