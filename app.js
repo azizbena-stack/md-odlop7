@@ -21,10 +21,13 @@ addEventListener('online', majReseau); addEventListener('offline', majReseau); m
 // ---------- Navigation ----------
 function ouvrir(vue) {
   $$('.vue').forEach(v => v.classList.toggle('active', v.id === 'v-' + vue));
-  $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.vue === vue));
+  $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.vue === vue || (b.dataset.vue === 'carte' && vue === 'boussole')));
+  $$('[data-seg]').forEach(b => b.classList.toggle('on', b.dataset.seg === vue));
   scrollTo({ top: 0 });
+  if (vue === 'carte') setTimeout(initPlan); // Leaflet a besoin d'un conteneur visible
 }
 $$('.tabs button').forEach(b => b.onclick = () => ouvrir(b.dataset.vue));
+$$('[data-seg]').forEach(b => b.onclick = () => ouvrir(b.dataset.seg));
 
 const modal = $('#modal');
 function popup(html) { $('#modalBody').innerHTML = html; modal.showModal(); }
@@ -67,6 +70,7 @@ function onPos(p) {
   majBoussole();
   majMer();
   meteoAuto();
+  majMoiPlan();
 }
 
 // ---------- Situation ----------
@@ -370,23 +374,177 @@ function majTrace() {
 }
 majTrace();
 
-// ---------- SOS : lumière ----------
-let lumTimer = 0;
+// ---------- Carte et itinéraire ----------
+// Fonds OpenStreetMap (plan) et OpenTopoMap (relief) : les tuiles déjà vues restent dans le téléphone (voir sw.js).
+// Itinéraire : serveurs OSRM publics de FOSSGIS (à pied, vélo, voiture). Il faut du réseau pour le calculer,
+// ensuite il est gardé dans le téléphone et la boussole peut prendre le relais en ligne droite.
+const FONDS = {
+  plan: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap' }],
+  topo: ['https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, subdomains: 'abc', crossOrigin: true, attribution: '© OpenStreetMap, SRTM · OpenTopoMap' }],
+};
+const MODES = { foot: ['routed-foot', 'à pied'], bike: ['routed-bike', 'à vélo'], car: ['routed-car', 'en voiture'] };
+let plan = null, fondLy = null, moiMk = null, routeLy = null, destMk = null, pointsLy = null, suivre = true;
+let destination = S.route?.dest || null, modeIti = S.route?.mode || 'foot';
+
+function initPlan() {
+  if (!window.L) return $('#itiRes').textContent = 'La carte n\'a pas pu se charger.';
+  if (plan) return plan.invalidateSize();
+  plan = L.map('plan', { zoomControl: false, attributionControl: true }).setView(pos ? ici() : [46.6, 2.4], pos ? 14 : 6);
+  plan.attributionControl.setPrefix(false);
+  pointsLy = L.layerGroup().addTo(plan);
+  changerFond(S.fond || 'plan');
+  plan.on('click', e => choisirDest([e.latlng.lat, e.latlng.lng], 'Point sur la carte'));
+  plan.on('dragstart', () => { suivre = false; });
+  plan.on('moveend', majPointsPlan);
+  if (S.route) dessinerRoute(S.route, false);
+  majMoiPlan(); majPointsPlan(); majModes();
+}
+function changerFond(f) {
+  S.fond = f; save();
+  fondLy?.remove(); fondLy = L.tileLayer(...FONDS[f]).addTo(plan);
+  $('#btnFond').textContent = f === 'plan' ? 'Relief' : 'Plan';
+}
+$('#btnFond').onclick = () => plan && changerFond(S.fond === 'plan' ? 'topo' : 'plan');
+$('#btnCentrer').onclick = () => { suivre = true; if (!pos) return demarrerGps(); plan?.setView(ici(), Math.max(plan.getZoom(), 15)); };
+
+function majMoiPlan() {
+  if (!plan || !pos) return;
+  if (!moiMk) moiMk = L.circleMarker(ici(), { radius: 8, color: '#fff', weight: 3, fillColor: '#007AFF', fillOpacity: 1 }).addTo(plan);
+  else moiMk.setLatLng(ici());
+  if (suivre && !routeLy) plan.setView(ici(), Math.max(plan.getZoom(), 14));
+}
+
+// Refuges, points d'eau, hôpitaux… et mes points, quand on zoome assez
+function majPointsPlan() {
+  if (!plan) return;
+  pointsLy.clearLayers();
+  const b = plan.getBounds();
+  S.points.forEach(p => L.circleMarker([p.lat, p.lon], { radius: 6, color: '#fff', weight: 2, fillColor: '#34C759', fillOpacity: 1 }).bindPopup(esc(p.nom)).addTo(pointsLy));
+  if (plan.getZoom() < 11) return;
+  POINTS.filter(p => b.contains([p[2], p[3]])).slice(0, 300).forEach(p => {
+    const [ico, lib] = TYPES[p[0]] || ['•', p[0]];
+    L.marker([p[2], p[3]], { icon: L.divIcon({ className: 'plan-pt', html: ico, iconSize: [26, 26] }) })
+      .bindPopup(`<b>${esc(p[1])}</b><br>${lib}${p[4] ? ' · ' + p[4] + ' m' : ''}`).addTo(pointsLy);
+  });
+}
+
+// Recherche d'une commune dans la liste hors ligne
+const nomCommune = c => `${c[0]} (${c[4]})`;
+$('#dest').oninput = () => {
+  const q = norm($('#dest').value.trim()); if (q.length < 2) return;
+  $('#destListe').innerHTML = COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => b[3] - a[3]).slice(0, 8)
+    .map(c => `<option value="${esc(nomCommune(c))}">`).join('');
+};
+$('#dest').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnIti').click(); });
+$('#btnIti').onclick = () => {
+  const v = $('#dest').value.trim(), q = norm(v.replace(/\s*\(\w+\)$/, ''));
+  if (!v) return destination ? calculerIti() : $('#dest').focus();
+  const c = COMMUNES.find(c => nomCommune(c) === v) || COMMUNES.filter(c => norm(c[0]) === q).sort((a, b) => b[3] - a[3])[0]
+    || COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => b[3] - a[3])[0];
+  if (!c) return $('#itiRes').textContent = 'Commune introuvable. Vérifie l\'orthographe ou touche la carte.';
+  choisirDest([c[1], c[2]], c[0]);
+};
+function majModes() { $$('#modes .chip').forEach(c => c.classList.toggle('on', c.dataset.mode === modeIti)); }
+$('#modes').onclick = e => { const b = e.target.closest('[data-mode]'); if (!b) return; modeIti = b.dataset.mode; majModes(); if (destination) calculerIti(); };
+
+function choisirDest(ll, nom) {
+  destination = { ll: ll.map(x => +x.toFixed(5)), nom };
+  if (plan) { destMk?.remove(); destMk = L.marker(ll, { icon: L.divIcon({ className: 'plan-dest', html: '', iconSize: [26, 34], iconAnchor: [13, 34] }) }).addTo(plan); }
+  calculerIti();
+}
+
+const SENS = { left: 'à gauche', right: 'à droite', 'slight left': 'légèrement à gauche', 'slight right': 'légèrement à droite', 'sharp left': 'franchement à gauche', 'sharp right': 'franchement à droite', straight: 'tout droit', uturn: 'demi-tour' };
+function consigne(s) {
+  const m = s.maneuver, sens = SENS[m.modifier] || '', rue = s.name ? ` sur ${s.name}` : '';
+  if (m.type === 'depart') return `Pars${rue}`;
+  if (m.type === 'arrive') return 'Tu es arrivé';
+  if (m.type === 'roundabout' || m.type === 'rotary') return `Au rond-point, prends la ${m.exit || 1}ᵉ sortie${rue}`;
+  if (m.type === 'fork') return `À la fourche, prends ${sens}${rue}`;
+  if (m.modifier === 'uturn') return `Fais demi-tour${rue}`;
+  if (m.modifier === 'straight' || !sens) return `Continue tout droit${rue}`;
+  return `Tourne ${sens}${rue}`;
+}
+
+async function calculerIti() {
+  if (!destination) return;
+  const dep = pos ? ici() : plan ? [plan.getCenter().lat, plan.getCenter().lng] : null;
+  if (!dep) return $('#itiRes').textContent = 'Position inconnue : active le GPS.';
+  $('#itiRes').textContent = `Calcul de l'itinéraire ${MODES[modeIti][1]} vers ${destination.nom}…`;
+  $('#btnItiBoussole').hidden = false;
+  try {
+    const u = `https://routing.openstreetmap.de/${MODES[modeIti][0]}/route/v1/driving/${dep[1]},${dep[0]};${destination.ll[1]},${destination.ll[0]}?overview=full&geometries=geojson&steps=true`;
+    const r = await fetch(u).then(r => r.json());
+    if (r.code !== 'Ok' || !r.routes?.length) throw new Error(r.message || 'aucun chemin trouvé');
+    const rt = r.routes[0];
+    S.route = {
+      dest: destination, mode: modeIti, d: rt.distance, t: rt.duration,
+      geo: rt.geometry.coordinates.map(([lo, la]) => [+la.toFixed(5), +lo.toFixed(5)]),
+      etapes: rt.legs[0].steps.map(s => [consigne(s), Math.round(s.distance)]),
+    };
+    save(); dessinerRoute(S.route, true);
+  } catch (e) {
+    const d = distance(dep, destination.ll);
+    $('#itiRes').innerHTML = (navigator.onLine ? `Itinéraire impossible (${esc(e.message)}).` : 'Pas de réseau : l\'itinéraire se calcule en ligne.')
+      + ` ${esc(destination.nom)} est à ${fmtDist(d)} à vol d'oiseau, direction ${cardinal(bearing(dep, destination.ll))}. La boussole peut t'y guider en ligne droite.`;
+  }
+}
+function dessinerRoute(R, cadrer) {
+  $('#itiRes').innerHTML = `<b>${esc(R.dest.nom)}</b> · ${fmtDist(R.d)} · ${duree(R.t * 1000)} ${MODES[R.mode][1]}`;
+  $('#etapes').innerHTML = R.etapes.map(([t, d]) => `<li><span>${esc(t)}</span>${d ? `<small>${fmtDist(d)}</small>` : ''}</li>`).join('');
+  $('#btnItiBoussole').hidden = false;
+  if (!plan) return;
+  routeLy?.remove(); routeLy = L.polyline(R.geo, { color: '#007AFF', weight: 6, opacity: .85 }).addTo(plan);
+  destMk?.remove(); destMk = L.marker(R.dest.ll, { icon: L.divIcon({ className: 'plan-dest', html: '', iconSize: [26, 34], iconAnchor: [13, 34] }) }).addTo(plan);
+  if (cadrer) { suivre = false; plan.fitBounds(routeLy.getBounds(), { padding: [30, 30] }); }
+}
+// Sans réseau : la destination devient un point suivi par la flèche de la boussole
+$('#btnItiBoussole').onclick = () => {
+  if (!destination) return;
+  const p = { id: Date.now().toString(36), nom: 'Destination : ' + destination.nom, lat: destination.ll[0], lon: destination.ll[1], t: Date.now() };
+  S.points.unshift(p); S.cible = p.id; save(); majPoints(); majBoussole(); ouvrir('boussole');
+};
+
+// ---------- SOS : lumière (flash arrière, l'écran en secours) ----------
+// Le flash = la caméra arrière avec la contrainte « torch » : Android (Chrome) et iPhone depuis iOS 18.
+let lumTimer = 0, flash = null;
 const lum = $('#lum');
-function lumiere(mode) {
+async function allumerFlash() {
+  if (flash) return true;
+  let s = null;
+  try {
+    s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+    const t = s.getVideoTracks()[0];
+    if (t.getCapabilities && !t.getCapabilities().torch) throw new Error('pas de flash');
+    await t.applyConstraints({ advanced: [{ torch: true }] });
+    $('#lumVideo').srcObject = s; // iPhone : le flux doit rester actif pour garder le flash allumé
+    flash = t; return true;
+  } catch { s?.getTracks().forEach(t => t.stop()); return false; }
+}
+const torche = on => flash?.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {});
+function eteindreFlash() { flash?.stop(); flash = null; $('#lumVideo').srcObject = null; }
+
+async function lumiere(mode) {
   clearTimeout(lumTimer); lum.hidden = false; lum.className = 'lum' + (mode === 'rouge' ? ' rouge' : '');
-  $('#lumTxt').textContent = mode === 'sos' ? 'SOS' : '';
-  if (mode === 'lampe' || mode === 'rouge') { lum.classList.add('on'); return; }
+  const viaFlash = mode !== 'rouge' && await allumerFlash();
+  const nom = { sos: 'SOS', montagne: 'Signal montagne', lampe: 'Lampe' }[mode] || '';
+  $('#lumTxt').textContent = mode === 'sos' && !viaFlash ? 'SOS' : '';
+  $('#lumInfo').textContent = mode === 'rouge' ? '' : viaFlash ? `${nom} · flash arrière allumé` : `${nom} · flash indisponible, l'écran prend le relais`;
+  lum.classList.toggle('flash', viaFlash);
+  if (mode === 'lampe' || mode === 'rouge') { lum.classList.add(viaFlash ? 'eclat' : 'on'); return; }
   // Morse SOS : · · · — — — · · ·  (unité 250 ms)  |  Montagne : 6 éclats/min puis 1 min de pause
   const u = 250, seq = mode === 'sos'
     ? [1, 1, 1, 1, 1, 3, 3, 1, 3, 1, 3, 3, 1, 1, 1, 1, 1, 7].map(x => x * u)
     : [...Array(6)].flatMap(() => [1500, 8500]).concat([60000]);
   let i = 0;
-  const step = () => { lum.classList.toggle('on', i % 2 === 0); lumTimer = setTimeout(step, seq[i % seq.length]); i++; };
+  const step = () => {
+    const on = i % 2 === 0;
+    if (viaFlash) { torche(on); lum.classList.toggle('eclat', on); } else lum.classList.toggle('on', on);
+    lumTimer = setTimeout(step, seq[i % seq.length]); i++;
+  };
   step();
 }
 $$('[data-lum]').forEach(b => b.onclick = () => lumiere(b.dataset.lum));
-$('#lumStop').onclick = () => { clearTimeout(lumTimer); lum.hidden = true; };
+$('#lumStop').onclick = () => { clearTimeout(lumTimer); eteindreFlash(); lum.hidden = true; };
 
 // ---------- SOS : sifflet ----------
 let ctx, siffle = false, siffleT = 0;
@@ -519,28 +677,47 @@ function orageOutil() {
 majFiches();
 
 // ---------- IA hors ligne ----------
-const MODELE = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC'; // ~1 Go, téléchargé une fois puis gardé dans le téléphone
-let moteur = null;
+// wllama = llama.cpp dans le navigateur : carte graphique (WebGPU) si le navigateur la donne, sinon le processeur.
+// Marche donc sur tous les iPhone. Le modèle est téléchargé une fois depuis Hugging Face puis gardé dans le téléphone.
+const MOBILE = /iPhone|iPad|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent));
+// ponytail: petit modèle sur téléphone (rapide sur le processeur, peu de mémoire), plus gros sur ordinateur (meilleures réponses)
+const HF = 'https://huggingface.co/Qwen/';
+const MODELE = MOBILE ? HF + 'Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf'
+  : HF + 'Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf';
+const TAILLE_IA = MOBILE ? '490 Mo' : '1,1 Go';
+let moteur = null, iaEnCours = null;
+const iaInstallee = () => S.ia === MODELE;
 function iaEtat(t) { $('#iaEtat').textContent = t; }
-if (!navigator.gpu) { iaEtat('Ce téléphone ne peut pas faire tourner l\'IA (WebGPU absent). Les fiches marchent quand même.'); $('#btnIA').hidden = true; }
-else if (S.ia) { $('#btnIA').textContent = 'Démarrer'; iaEtat('Installée · appuie pour la démarrer (quelques secondes)'); }
+if (iaInstallee()) { $('#btnIA').textContent = 'Démarrer'; iaEtat('Installée · appuie pour la démarrer'); }
 
-async function chargerIA() {
+function chargerIA() { return iaEnCours ??= demarrerIA().finally(() => { iaEnCours = null; }); }
+async function demarrerIA() {
   if (moteur) return moteur;
   const prog = $('#iaProg'); prog.hidden = false; $('#btnIA').disabled = true;
+  iaEtat(iaInstallee() ? 'Démarrage…' : 'Préparation…');
   try {
-    const { CreateMLCEngine } = await import('./vendor/web-llm.js');
-    moteur = await CreateMLCEngine(MODELE, { initProgressCallback: r => { prog.firstElementChild.style.width = Math.round(r.progress * 100) + '%'; iaEtat(S.ia ? 'Démarrage…' : `Téléchargement… ${Math.round(r.progress * 100)} %`); } });
-    S.ia = true; save();
+    const { Wllama } = await import('./vendor/wllama.js');
+    const w = new Wllama({ default: new URL('vendor/wllama.wasm', location.href).href },
+      { allowOffline: true, logger: { debug() {}, log() {}, warn: console.warn, error: console.error } });
+    await w.loadModelFromUrl(MODELE, {
+      n_ctx: 4096,
+      progressCallback: ({ loaded, total }) => {
+        const p = total ? Math.round(loaded / total * 100) : 0;
+        prog.firstElementChild.style.width = p + '%';
+        iaEtat(p < 100 ? `Téléchargement… ${p} %` : 'Démarrage…');
+      },
+    });
+    moteur = w; S.ia = MODELE; save();
     iaEtat('Prête · fonctionne sans internet'); $('#btnIA').hidden = true; prog.hidden = true;
     return moteur;
   } catch (e) {
-    iaEtat(navigator.onLine || S.ia ? 'Échec du chargement : ' + (e.message || e) : 'Il faut internet pour l\'installer la première fois.');
+    console.error(e);
+    iaEtat(navigator.onLine || iaInstallee() ? 'Échec : ' + (e.message || e) : 'Il faut internet pour l\'installer la première fois.');
     $('#btnIA').disabled = false; prog.hidden = true; return null;
   }
 }
 $('#btnIA').onclick = () => {
-  if (!S.ia && !confirm('Télécharger l\'assistant IA (environ 1 Go) ? Fais-le en Wi-Fi, avant de partir.')) return;
+  if (!iaInstallee() && !confirm(`Télécharger l'assistant IA (environ ${TAILLE_IA}) ? Fais-le en Wi-Fi, avant de partir.`)) return;
   chargerIA();
 };
 
@@ -557,21 +734,23 @@ function contexteSituation() {
 $('#btnDemander').onclick = async () => {
   const q = $('#question').value.trim(); if (!q) return $('#question').focus();
   const sources = chercher(q).slice(0, 3), rep = $('#reponse');
+  // ponytail: 2 fiches coupées à 1 200 caractères, sinon la lecture du contexte est trop lente sur le processeur d'un téléphone
+  const pourIA = sources.slice(0, 2);
   rep.hidden = false;
   const liens = `<div class="src">${sources.map(f => `<button class="chip" data-ouvre="${f.id}">${f.titre}</button>`).join('')}</div>`;
   if (!moteur) {
-    if (S.ia) { rep.textContent = 'Démarrage de l\'IA…'; await chargerIA(); }
+    if (iaInstallee()) { rep.textContent = 'Démarrage de l\'IA…'; await chargerIA(); }
     if (!moteur) { rep.innerHTML = (sources.length ? '<b>Fiches qui répondent à ta question :</b>' : 'Aucune fiche ne correspond. Essaie avec d\'autres mots.') + liens; return; }
   }
-  const base = sources.map(f => `### ${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n')}`).join('\n\n');
+  const base = pourIA.map(f => `### ${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 1200)}`).join('\n\n');
   const msgs = [
     { role: 'system', content: `Tu es Repère, un assistant de survie hors ligne. Réponds en français, en tutoyant, en 3 à 6 étapes courtes et concrètes. Base-toi UNIQUEMENT sur les fiches fournies. Si elles ne contiennent pas la réponse, dis-le simplement. Si la vie est en danger, commence par « Appelle le 112 ». N'invente jamais de plante comestible ni de dosage.\n\nSituation : ${contexteSituation()}\n\nFiches :\n${base || '(aucune fiche pertinente)'}` },
     { role: 'user', content: q },
   ];
-  rep.textContent = '…';
+  rep.textContent = 'Repère réfléchit…';
   try {
     let out = '';
-    for await (const ch of await moteur.chat.completions.create({ messages: msgs, stream: true, temperature: .3, max_tokens: 380 })) {
+    for await (const ch of await moteur.createChatCompletion({ messages: msgs, stream: true, temperature: .3, max_tokens: 380 })) {
       out += ch.choices[0]?.delta?.content || ''; rep.textContent = out;
     }
     rep.insertAdjacentHTML('beforeend', liens);
@@ -821,23 +1000,36 @@ setInterval(() => {
 }, 15000);
 
 // ---------- Radio en direct (Radio France, par les données cellulaires) ----------
-// Qualité basse (32 kbit/s ≈ 15 Mo/h) : passe même avec une barre de réseau et ménage le forfait.
-const RADIOS = { franceinfo: 'franceinfo', franceinter: 'France Inter', fip: 'FIP', franceculture: 'France Culture', mouv: 'Mouv\'', francemusique: 'France Musique' };
+// Radio France en qualité basse (32 kbit/s ≈ 15 Mo/h) ; les autres sont en 64 à 128 kbit/s (30 à 60 Mo/h).
+const RF = s => `https://icecast.radiofrance.fr/${s}-lofi.mp3`;
+const RADIOS = {
+  info: ['Infos', {
+    franceinfo: ['franceinfo', RF('franceinfo'), 15], franceinter: ['France Inter', RF('franceinter'), 15],
+    rfi: ['RFI', 'https://rfimonde64k.ice.infomaniak.ch/rfimonde-64.mp3', 30], europe1: ['Europe 1', 'https://stream.europe1.fr/europe1.mp3', 60],
+    rtl: ['RTL', 'https://icecast.rtl.fr/rtl-1-44-128', 60], rmc: ['RMC', 'https://audio.bfmtv.com/rmcradio_128.mp3', 60],
+    bfm: ['BFM Business', 'https://audio.bfmtv.com/bfmbusiness_128.mp3', 60], sud: ['Sud Radio', 'https://start-sud.ice.infomaniak.ch/start-sud-high.mp3', 60],
+  }],
+  autres: ['Musique et culture', {
+    fip: ['FIP', RF('fip'), 15], franceculture: ['France Culture', RF('franceculture'), 15], mouv: ['Mouv\'', RF('mouv'), 15], francemusique: ['France Musique', RF('francemusique'), 15],
+  }],
+};
+const STATIONS = Object.assign({}, ...Object.values(RADIOS).map(g => g[1]));
 const lecteur = new Audio();
 let radioOn = null;
-$('#radios').innerHTML = Object.entries(RADIOS).map(([k, v]) => `<button class="chip" data-r="${k}">${v}</button>`).join('');
+$('#radios').innerHTML = Object.values(RADIOS).map(([titre, st]) => `<div class="meta radio-groupe">${titre}</div>
+  <div class="chips">${Object.entries(st).map(([k, v]) => `<button class="chip" data-r="${k}">${v[0]}</button>`).join('')}</div>`).join('');
 function majRadio(t) {
   $$('#radios .chip').forEach(c => c.classList.toggle('on', c.dataset.r === radioOn));
-  $('#radioEtat').textContent = t || (radioOn ? '● En direct · ~15 Mo/h' : 'Par les données cellulaires');
+  $('#radioEtat').textContent = t || (radioOn ? `● En direct · ~${STATIONS[radioOn][2]} Mo/h` : 'Par les données cellulaires');
 }
 $('#radios').onclick = e => {
   const b = e.target.closest('[data-r]'); if (!b) return;
   if (radioOn === b.dataset.r) { radioOn = null; lecteur.pause(); lecteur.removeAttribute('src'); }
   else {
     radioOn = b.dataset.r;
-    lecteur.src = `https://icecast.radiofrance.fr/${radioOn}-lofi.mp3`;
+    lecteur.src = STATIONS[radioOn][1];
     lecteur.play().catch(() => majRadio('Lecture refusée : touche à nouveau la station'));
-    if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: RADIOS[radioOn], artist: 'Repère · radio' });
+    if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: STATIONS[radioOn][0], artist: 'Repère · radio' });
   }
   majRadio();
 };
