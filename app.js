@@ -420,7 +420,7 @@ function initPlan() {
   if (!window.maplibregl) return $('#itiRes').textContent = 'La carte n\'a pas pu se charger.';
   if (plan) return plan.resize();
   try {
-    plan = new maplibregl.Map({ container: 'plan', style: STYLE, center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 75, attributionControl: { compact: true } });
+    plan = new maplibregl.Map({ container: 'plan', style: STYLE, center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 60, attributionControl: { compact: true } }); // 60° au plus : au-delà on voit le ciel en haut de l’écran (Aziz veut la carte sur tout l’écran)
   } catch {
     // Vu le 17/11 : Chrome met sur liste noire les cartes graphiques des vieux Mac (Iris Pro, GT 750M) ; Safari, lui, affiche la carte
     $('.plan-btns').hidden = true;
@@ -479,7 +479,7 @@ function vue3D(on) {
   // Relief d'abord, inclinaison ensuite : sinon la caméra reste à l'altitude 0, « sous » la montagne, le temps que les altitudes arrivent
   plan.setTerrain({ source: 'dem', exaggeration: 1.8 });
   // ponytail: 3D ouverte au zoom 11 à 13,5 : plus près, beaucoup de morceaux à dessiner (testé seulement en rendu logiciel, à vérifier sur téléphone)
-  plan.once('idle', () => en3D && !guidage && plan.easeTo({ pitch: 72, zoom: Math.min(Math.max(plan.getZoom(), 11), 14) }));
+  plan.once('idle', () => en3D && !guidage && plan.easeTo({ pitch: 60, zoom: Math.min(Math.max(plan.getZoom(), 11), 14) }));
 }
 $('#btn3D').onclick = () => vue3D(!en3D);
 function majRelief() {
@@ -512,7 +512,7 @@ function demarrerGuidage() {
 function arreterGuidage(msg) {
   guidage = false; navMk?.remove(); navMk = null; $('#navBandeau').hidden = true; if (S.route) dessinerRoute(S.route, false);
   if ($('.plan-wrap').classList.contains('plein')) $('#btnPlein').click();
-  plan?.easeTo({ pitch: en3D ? 72 : 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 } });
+  plan?.easeTo({ pitch: en3D ? 60 : 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 } });
   majMoiPlan(); if (msg) $('#itiRes').textContent = msg;
 }
 // Point le plus proche sur le tracé, puis direction de la route ~30 m plus loin (marche même à l'arrêt, sans boussole)
@@ -538,7 +538,7 @@ function majGuidage() {
   const dEtape = prochaine ? cumul[prochaine.i] - cumul[i0] + dmin : fin;
   $('#navConsigne').textContent = dmin > 60 ? 'Tu t\'écartes de l\'itinéraire : rejoins la ligne violette' : prochaine ? prochaine.t : 'Tout droit jusqu\'à l\'arrivée';
   $('#navDist').textContent = `Dans ${fmtDist(dEtape)} · arrivée à ${fmtDist(fin)}`;
-  if (suivre) plan.easeTo({ center: lnglat(me), bearing: cap, pitch: 70, zoom: 17, duration: 900,
+  if (suivre) plan.easeTo({ center: lnglat(me), bearing: cap, pitch: 58, zoom: 17, duration: 900,
     padding: { top: Math.round(plan.getContainer().clientHeight * .45), bottom: 0, left: 0, right: 0 } });
 }
 $('#navStop').onclick = () => arreterGuidage();

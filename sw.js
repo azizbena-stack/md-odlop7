@@ -1,5 +1,5 @@
 // Hors ligne : tout est mis en cache à l'installation, puis servi sans réseau.
-const V = 'repere-v17', TUILES = 'repere-tuiles', ZONES = 'repere-zones';
+const V = 'repere-v18', TUILES = 'repere-tuiles', ZONES = 'repere-zones';
 const FICHIERS = ['./', 'index.html', 'style.css', 'app.js', 'geo.js', 'guide.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'data/communes.json', 'data/points.json', 'data/wiki.json', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css', 'vendor/wllama.js', 'vendor/wllama.wasm', 'vendor/wllama-mt.wasm'];
 // La météo (api.open-meteo.com) n'est pas mise en cache ici : l'app la garde elle-même dans le téléphone.
