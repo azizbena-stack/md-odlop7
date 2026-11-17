@@ -756,7 +756,7 @@ $('#btnDemander').onclick = async () => {
   try {
     await moteur.createCompletion(prompt, {
       nPredict: 300, sampling: { temp: .3, top_p: .9, penalty_repeat: 1.1 },
-      onNewToken: (t, p, texte) => { const el = $('#iaTexte'); if (el) { el.className = ''; el.textContent = '1.' + texte; } },
+      onNewToken: (t, p, texte) => { const el = $('#iaTexte'); if (el) { el.className = ''; el.style.whiteSpace = 'pre-line'; el.textContent = ('1.' + texte).replace(/\*\*/g, ''); } },
     });
   } catch (e) { $('#iaTexte').textContent = 'Erreur de l\'IA : ' + (e.message || e); }
   iaOccupee = false; $('#btnDemander').disabled = false;
