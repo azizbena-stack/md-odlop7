@@ -429,7 +429,7 @@ function initPlan() {
     // Carte épurée (demande d'Aziz) : pas de bâtiments ni d'arrêts de transport ; seuls points affichés : essence, hôtels,
     // restaurants, hôpitaux (la classe « hospital » d'OpenMapTiles comprend les cliniques)
     // Ciel peint (sinon transparent = bande grise au-dessus de l'horizon en vue inclinée) : la carte remplit tout l'écran
-    plan.setSky({ 'sky-color': '#BFDDF5', 'horizon-color': '#EEF3F6', 'fog-color': '#F2EFE9', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.6 });
+    plan.setSky({ 'sky-color': '#DCEAF5', 'horizon-color': '#EEF3F6', 'fog-color': '#F2EFE9', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.6 });
     // Fond plus clair et eau plus bleue, façon GPS de voiture (2D comme 3D)
     plan.getLayer('background') && plan.setPaintProperty('background', 'background-color', '#F4F2EE');
     plan.getLayer('water') && plan.setPaintProperty('water', 'fill-color', '#9DCFF2');

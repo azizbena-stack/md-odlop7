@@ -339,7 +339,9 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 .plan-wrap { position: relative; border-radius: var(--r); overflow: hidden; margin-bottom: 14px; box-shadow: var(--ombre); background: var(--surface); }
 /* Carte en grand : tout l'écran du téléphone entre le titre et la barre d'onglets ; bouton ⤢ = plein écran */
 #plan { height: max(420px, calc(100dvh - 290px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); background: var(--bg2); }
-.plan-wrap.plein { position: fixed; inset: 0; z-index: 40; border-radius: 0; margin: 0; }
+/* En vue inclinée MapLibre ne dessine pas le haut de l'écran : on y voit ce fond, donc même couleur que le ciel (sinon bande sombre en thème Studio) */
+#plan.maplibregl-map { background: #DCEAF5; }
+.plan-wrap.plein { position: fixed; inset: 0; z-index: 40; border-radius: 0; margin: 0; border: 0 !important; }
 .plan-wrap.plein #plan { height: 100dvh; }
 .plan-btns { display: grid; gap: 8px; }
 /* Boutons et choix d'itinéraire en bas de la carte (au-dessus des crédits) */
