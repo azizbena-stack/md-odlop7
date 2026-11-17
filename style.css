@@ -334,7 +334,11 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 
 /* Carte */
 .plan-wrap { position: relative; border-radius: var(--r); overflow: hidden; margin-bottom: 14px; box-shadow: var(--ombre); background: var(--surface); }
-#plan { height: min(58vh, 460px); background: var(--bg2); }
+/* Carte en grand : tout l'écran du téléphone entre le titre et la barre d'onglets ; bouton ⤢ = plein écran */
+#plan { height: max(420px, calc(100dvh - 290px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); background: var(--bg2); }
+.plan-wrap.plein { position: fixed; inset: 0; z-index: 40; border-radius: 0; margin: 0; }
+.plan-wrap.plein #plan { height: 100dvh; }
+.plan-wrap.plein .plan-btns { top: calc(10px + env(safe-area-inset-top)); }
 .plan-btns { position: absolute; top: 10px; right: 10px; z-index: 500; display: grid; gap: 8px; }
 .plan-btn { border: 0; min-width: 44px; height: 44px; padding: 0 12px; border-radius: 14px; font-weight: 600; font-size: 14px; color: var(--accent); cursor: pointer;
   background: var(--barre); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 4px 14px rgba(0, 0, 0, .15); display: grid; place-items: center; }
@@ -354,3 +358,57 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 .etapes li span::before { content: counter(e) '. '; color: var(--txt2); }
 .etapes small { color: var(--txt2); white-space: nowrap; }
 #modes { margin-top: -2px; }
+#proches li[data-ll], #radar [data-ll] { cursor: pointer; }
+#proches li[data-ll]:active { opacity: .5; }
+
+/* ---------- Thème « Arcade » : jeu voxel, couleurs vives, gros contours, boutons qui s'enfoncent ----------
+   (réglage dans Moi ; le mode survie et le mode nuit rouge passent devant) */
+@font-face { font-family: 'Lilita One'; src: url(vendor/lilita-one.woff2) format('woff2'); font-display: swap; } /* SIL OFL */
+:root.arcade:not(.survie):not([data-theme="rouge"]) {
+  --bg: #8FD8FF; --bg2: #E9F6FF; --surface: #FFFFFF; --surface2: #FFF7D6; --ligne: #2B1D4E;
+  --txt: #2B1D4E; --txt2: #5B4E85; --txt3: #9A90BF;
+  --accent: #FF3E9A; --accent2: #7B3FF2; --ambre: #FF9F1C; --ok: #2E9E2E; --vert: #4CD137; --warn: #FF6B00; --danger: #FF3B3B;
+  --barre: #FFFFFF; --verre-bord: #2B1D4E; --r: 14px; --contour: 3px solid #2B1D4E;
+  --ombre: 0 5px 0 #2B1D4E;
+  color-scheme: light;
+}
+:root.arcade:not(.survie):not([data-theme="rouge"]) body {
+  background: linear-gradient(#5EC8FF 0, #9EE0FF 260px, #C9F0FF 700px) fixed; font-weight: 500;
+}
+/* En-tête : bande de cubes d'herbe en bas */
+:root.arcade:not(.survie):not([data-theme="rouge"]) .top {
+  backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: var(--contour); padding-bottom: 18px;
+  background: linear-gradient(to bottom, #fff calc(100% - 8px), transparent 0),
+    repeating-linear-gradient(90deg, #4CD137 0 16px, #3DB82B 16px 32px) bottom / 100% 8px no-repeat;
+}
+:root.arcade:not(.survie):not([data-theme="rouge"]) :is(.titre, .brand b, .k, h2, .coach-msg, .tabs button, .btn, .chip, .segment button) {
+  font-family: 'Lilita One', var(--font); font-weight: 400; letter-spacing: .02em;
+}
+:root.arcade:not(.survie):not([data-theme="rouge"]) .titre { font-size: 40px; color: #fff; text-shadow: 0 3px 0 #2B1D4E, 3px 0 0 #2B1D4E, -3px 0 0 #2B1D4E, 0 -3px 0 #2B1D4E, 3px 3px 0 #2B1D4E, -3px 3px 0 #2B1D4E, 0 7px 0 #2B1D4E; }
+:root.arcade:not(.survie):not([data-theme="rouge"]) .k { color: var(--accent2); font-size: 17px; text-transform: uppercase; }
+/* Cartes en blocs : gros contour, ombre dure */
+:root.arcade:not(.survie):not([data-theme="rouge"]) :is(.carte, .plan-wrap, .meteo, .coach, #fiches li, .modal-in, dialog) {
+  border: var(--contour); box-shadow: var(--ombre); border-radius: var(--r);
+}
+:root.arcade:not(.survie):not([data-theme="rouge"]) .plan-wrap.plein { border: 0; border-radius: 0; }
+/* Boutons qui s'enfoncent quand on appuie */
+:root.arcade:not(.survie):not([data-theme="rouge"]) :is(.btn, .chip, .plan-btn, .survie-toggle) {
+  border: var(--contour); box-shadow: 0 4px 0 #2B1D4E; border-radius: 12px; transition: transform .08s, box-shadow .08s;
+}
+:root.arcade:not(.survie):not([data-theme="rouge"]) :is(.btn, .chip, .plan-btn, .survie-toggle):active { transform: translateY(4px); box-shadow: 0 0 0 #2B1D4E; opacity: 1; }
+:root.arcade:not(.survie):not([data-theme="rouge"]) .btn { background: #FFE14D; color: var(--txt); }
+:root.arcade:not(.survie):not([data-theme="rouge"]) .btn.primaire { background: var(--vert); color: #fff; text-shadow: 0 2px 0 #2B1D4E; }
+:root.arcade:not(.survie):not([data-theme="rouge"]) :is(.chip.on, .plan-btn.on, .plan-btn[aria-pressed="true"]) { background: var(--accent); color: #fff; }
+:root.arcade:not(.survie):not([data-theme="rouge"]) .plan-btn { background: #fff; color: var(--accent2); }
+:root.arcade:not(.survie):not([data-theme="rouge"]) input { border: var(--contour); border-radius: 12px; background: #fff; }
+:root.arcade:not(.survie):not([data-theme="rouge"]) .segment { background: #fff; border: var(--contour); border-radius: 14px; padding: 3px; }
+:root.arcade:not(.survie):not([data-theme="rouge"]) .segment button.on { background: var(--accent2); color: #fff; box-shadow: none; }
+:root.arcade:not(.survie):not([data-theme="rouge"]) .proches .pastille { background: #FFE14D; border: var(--contour); border-radius: 8px; }
+/* Barre d'onglets : panneau violet de jeu */
+:root.arcade:not(.survie):not([data-theme="rouge"]) .tabs {
+  background: #7B3FF2; border: var(--contour); box-shadow: 0 6px 0 #2B1D4E; backdrop-filter: none; -webkit-backdrop-filter: none; border-radius: 22px;
+}
+:root.arcade:not(.survie):not([data-theme="rouge"]) .tabs button { color: #fff; font-size: 12px; border-radius: 14px; }
+:root.arcade:not(.survie):not([data-theme="rouge"]) .tabs button.active { background: #FFE14D; color: var(--txt); }
+:root.arcade:not(.survie):not([data-theme="rouge"]) .tab-sos span { border: var(--contour); box-shadow: 0 4px 0 #2B1D4E; border-radius: 14px; }
+#btnPlein { font-size: 22px; line-height: 1; }

@@ -20,6 +20,7 @@ addEventListener('online', majReseau); addEventListener('offline', majReseau); m
 
 // ---------- Navigation ----------
 function ouvrir(vue) {
+  if (vue !== 'carte') { $('.plan-wrap')?.classList.remove('plein'); $('#btnPlein') && ($('#btnPlein').textContent = '⤢'); }
   $$('.vue').forEach(v => v.classList.toggle('active', v.id === 'v-' + vue));
   $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.vue === vue || (b.dataset.vue === 'carte' && vue === 'boussole')));
   $$('[data-seg]').forEach(b => b.classList.toggle('on', b.dataset.seg === vue));
@@ -113,7 +114,7 @@ function majSituation() {
     if (n && n.d < 60000) lignes.push(n);
   }
   lignes.sort((a, b) => a.d - b.d);
-  $('#proches').innerHTML = lignes.map(n => `<li><span class="pastille">${TYPES[n.p[0]][0]}</span>
+  $('#proches').innerHTML = lignes.map(n => `<li data-ll="${n.p[2]},${n.p[3]}" data-nom="${esc(n.p[1])}"><span class="pastille">${TYPES[n.p[0]][0]}</span>
     <span class="nom"><b>${esc(n.p[1])}</b><span>${TYPES[n.p[0]][1]}${n.p[4] ? ' · ' + n.p[4] + ' m' : ''}</span></span>
     <span class="dist"><svg data-cap="${n.cap}" style="transform:rotate(${n.cap - (heading ?? 0)}deg)"><use href="#i-fleche"/></svg> ${fmtDist(n.d)}<br><small class="meta">${cardinal(n.cap)}</small></span></li>`).join('')
     || '<li class="meta">Aucun refuge ni point d\'eau répertorié à moins de 60 km.</li>';
@@ -140,10 +141,22 @@ function dessinerRadar(here) {
     <circle class="anneau" r="100"/><circle class="anneau" r="66" stroke-dasharray="2 3"/><circle class="anneau" r="33" stroke-dasharray="2 3"/>
     <text x="3" y="-68">3,3 km</text><text x="3" y="-35">1,7 km</text>
     <g transform="rotate(${rotH})"><text x="-4" y="-103" style="fill:var(--accent);font-size:10px">N</text></g>
-    ${vil.map(n => { const [x, y] = xy(n); return `<rect x="${x - 4}" y="${y - 4}" width="8" height="8" rx="2" fill="var(--txt)"/><text x="${x + 7}" y="${y + 3}" style="fill:var(--txt2)">${esc(n.p[0].slice(0, 14))}</text>`; }).join('')}
-    ${pts.map(n => { const [x, y] = xy(n); const c = n.p[0] === 'eau' ? '#5BB8FF' : n.p[0] === 'danger' ? 'var(--danger)' : n.p[0] === 'hopital' ? '#FF2D55' : 'var(--ambre)'; return `<circle cx="${x}" cy="${y}" r="3.5" fill="${c}"/>`; }).join('')}
+    ${vil.map(n => { const [x, y] = xy(n); return `<g data-ll="${n.p[1]},${n.p[2]}" data-nom="${esc(n.p[0])}"><rect x="${x - 4}" y="${y - 4}" width="8" height="8" rx="2" fill="var(--txt)"/><text x="${x + 7}" y="${y + 3}" style="fill:var(--txt2)">${esc(n.p[0].slice(0, 14))}</text></g>`; }).join('')}
+    ${pts.map(n => { const [x, y] = xy(n); const c = n.p[0] === 'eau' ? '#5BB8FF' : n.p[0] === 'danger' ? 'var(--danger)' : n.p[0] === 'hopital' ? '#FF2D55' : 'var(--ambre)'; return `<g data-ll="${n.p[2]},${n.p[3]}" data-nom="${esc(n.p[1])}"><circle cx="${x}" cy="${y}" r="9" fill="transparent"/><circle cx="${x}" cy="${y}" r="3.5" fill="${c}"/></g>`; }).join('')}
     <circle r="6" fill="var(--accent)"/><circle r="12" fill="none" stroke="var(--accent)" opacity=".4"/>`;
 }
+
+// Toucher un repère (liste ou radar) : la carte s'ouvre dessus avec l'itinéraire ; sans réseau, « Suivre à la boussole »
+$('#proches').onclick = $('#radar').onclick = e => {
+  const el = e.target.closest('[data-ll]'); if (!el) return;
+  const ll = el.dataset.ll.split(',').map(Number);
+  ouvrir('carte'); initPlan(); // tout de suite (pas au tour suivant) pour poser le repère
+  if (plan) { // moi et le repère dans le cadre (la route recadrera si elle arrive)
+    suivre = false;
+    plan.fitBounds(new maplibregl.LngLatBounds(lnglat(ll), lnglat(ll)).extend(lnglat(pos ? ici() : ll)), { padding: 60, maxZoom: 15, duration: 0 });
+  }
+  choisirDest(ll, el.dataset.nom);
+};
 
 // ---------- Soleil ----------
 function majSoleil() {
@@ -414,6 +427,11 @@ function initPlan() {
   plan.on('moveend', majPointsPlan);
   majMoiPlan(); majPointsPlan(); majModes(); majRelief(); majZones();
 }
+$('#btnPlein').onclick = () => {
+  const on = $('.plan-wrap').classList.toggle('plein');
+  $('#btnPlein').textContent = on ? '✕' : '⤢'; $('#btnPlein').setAttribute('aria-label', on ? 'Quitter le plein écran' : 'Carte en plein écran');
+  plan?.resize();
+};
 // 2D = vue du dessus (à vol d'oiseau) ; 3D = carte inclinée avec le relief en volume et les bâtiments
 function vue3D(on) {
   en3D = on; $('#btn3D').textContent = on ? '2D' : '3D'; $('#btn3D').classList.toggle('on', on);
@@ -740,11 +758,13 @@ $('#cats').innerHTML = `<button class="chip on" data-cat="">Tout</button>` + Obj
 $('#cats').onclick = e => { const c = e.target.closest('.chip'); if (!c) return; catSel = c.dataset.cat || null; $$('#cats .chip').forEach(x => x.classList.toggle('on', x === c)); majFiches(); };
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const texte = f => norm(f.titre + ' ' + f.mots + ' ' + f.corps.replace(/<[^>]+>/g, ' '));
-const VIDES = new Set('les des une est suis pour dans avec que qui quoi comment faire fait mon mes ton tes son ses sur pas plus tres trop elle ils nous vous mais car donc etre avoir quand'.split(' '));
+const VIDES = new Set('les des une est suis pour dans avec que qui quoi comment faire fait mon mes ton tes son ses sur pas plus tres trop elle ils nous vous mais car donc etre avoir quand peux peut dire dis combien quel quelle quels quelles sais faut veux moi toi cela ceci comme bien tout aussi parce pourquoi'.split(' '));
+// Un mot de la question doit commencer un mot du texte : « eau » trouve « eaux » mais plus « bateau » ni « peau »
+const contient = (t, m) => new RegExp('(^|[^a-z0-9])' + m).test(t);
 const motsCle = q => norm(q).split(/[^a-z0-9]+/).filter(m => m.length > 2 && !VIDES.has(m)).map(m => m.slice(0, Math.max(4, m.length - 2)));
 function chercher(q) {
   const mots = motsCle(q);
-  return FICHES.map(f => { const t = texte(f), tm = norm(f.titre + ' ' + f.mots); return { f, s: mots.reduce((a, m) => a + (tm.includes(m) ? 3 : 0) + (t.includes(m) ? 1 : 0), 0) }; })
+  return FICHES.map(f => { const t = texte(f), tm = norm(f.titre + ' ' + f.mots); return { f, s: mots.reduce((a, m) => a + (contient(tm, m) ? 3 : 0) + (contient(t, m) ? 1 : 0), 0) }; })
     .filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.f);
 }
 
@@ -754,7 +774,7 @@ fetch('data/wiki.json').then(r => r.json()).then(d => { WIKI = d.articles.map(a 
 function chercherWiki(q, n = 6) {
   const mots = motsCle(q); if (!mots.length) return [];
   // ponytail: le titre compte beaucoup plus que le texte, sinon les longs articles gagnent toujours
-  return WIKI.map(a => ({ a, s: mots.reduce((s, m) => s + (a.n.includes(m) ? 6 : 0) + (a.nx.includes(m) ? 1 : 0), 0) }))
+  return WIKI.map(a => ({ a, s: mots.reduce((s, m) => s + (contient(a.n, m) ? 6 : 0) + (contient(a.nx, m) ? 1 : 0), 0) }))
     .filter(x => x.s > 1).sort((x, y) => y.s - x.s).slice(0, n).map(x => x.a);
 }
 const ligneWiki = a => `<li data-wiki="${esc(a.t)}"><span><small>Wikipédia · ${esc(a.th)}</small><b>${esc(a.t)}</b></span></li>`;
@@ -890,22 +910,34 @@ $('#btnDemander').onclick = async () => {
     if (!moteur) { rep.innerHTML = (sources.length || wiki.length ? '<b>Ce qui répond à ta question :</b>' : 'Rien ne correspond. Essaie avec d\'autres mots.') + liens; return; }
   }
   if (iaOccupee) return;
-  // ponytail: une seule source coupée à 900 caractères (la fiche, sinon l'article Wikipédia) : sur le processeur d'un téléphone, chaque mot lu coûte du temps
-  const f = sources[0], w = wiki[0];
-  const base = f ? `${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 900)}`
-    : w ? `${w.t}\n${w.x.replace(/^=+.*=+$/gm, '').replace(/\n+/g, '\n').slice(0, 900)}` : '(aucune fiche)';
-  // ponytail: prompt Qwen (ChatML) écrit à la main et réponse amorcée par « 1. » : sans ça le petit modèle (0,5B)
-  // recopie les consignes ou pose des questions au lieu de donner les gestes
-  const prompt = `<|im_start|>system\nTu es un guide de survie. Tu donnes les gestes à faire, en français, en 3 à 5 étapes numérotées, d'après la fiche.<|im_end|>\n<|im_start|>user\nFiche :\n${base}\n\n${contexteSituation()}\n\nQuestion : ${q}<|im_end|>\n<|im_start|>assistant\n1.`;
-  // Les fiches s'affichent tout de suite, la réponse de l'IA s'écrit au-dessus au fur et à mesure
-  rep.innerHTML = `<div id="iaTexte" class="meta">Repère lit la fiche…</div>${liens}`;
+  // ponytail: une seule source coupée à 600 caractères (la fiche, sinon l'article Wikipédia) : sur le processeur d'un téléphone, chaque mot lu coûte du temps
+  // Seulement une source vraiment liée (plus de la moitié des mots de la question dans son titre) : une fiche hors sujet égare l'IA et la ralentit
+  const mots = motsCle(q), titreLie = t => mots.length && mots.filter(m => contient(norm(t), m)).length > mots.length / 2;
+  const f = sources.find(x => titreLie(x.titre + ' ' + x.mots)), w = wiki.find(a => titreLie(a.t));
+  const base = f ? `${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 600)}`
+    : w ? `${w.t}\n${w.x.replace(/^=+.*=+$/gm, '').replace(/\n+/g, '\n').slice(0, 600)}` : '';
+  // ponytail: prompt Qwen (ChatML) écrit à la main. Avec une fiche, réponse amorcée par « 1. » : sans ça le petit modèle (0,5B)
+  // recopie les consignes ou pose des questions au lieu de donner les gestes. Sans fiche : réponse courte de lui-même.
+  const amorce = base ? '1.' : '';
+  const prompt = base
+    ? `<|im_start|>system\nTu es un guide de survie. Tu donnes les gestes à faire, en français, en 3 à 5 étapes numérotées, d'après la fiche.<|im_end|>\n<|im_start|>user\nFiche :\n${base}\n\n${contexteSituation()}\n\nQuestion : ${q}<|im_end|>\n<|im_start|>assistant\n1.`
+    : `<|im_start|>system\nTu es un guide de survie. Réponds en français, en 2 ou 3 phrases courtes et concrètes.<|im_end|>\n<|im_start|>user\n${q}<|im_end|>\n<|im_start|>assistant\n`;
+  // Les fiches s'affichent tout de suite, la réponse de l'IA s'écrit au-dessus au fur et à mesure.
+  // Avant le premier mot, l'IA lit (sur le processeur, ça peut prendre une minute) : un compteur montre qu'elle travaille.
+  rep.innerHTML = `<div id="iaTexte" class="meta">${base ? 'Repère lit la fiche' : 'Repère réfléchit'}…</div>${liens}`;
   iaOccupee = true; $('#btnDemander').disabled = true;
+  const t0 = Date.now(), chrono = setInterval(() => {
+    const el = $('#iaTexte'), s = Math.round((Date.now() - t0) / 1000);
+    if (el?.classList.contains('meta')) el.textContent = `${base ? 'Repère lit la fiche' : 'Repère réfléchit'}… ${s} s${s > 10 ? ' · sans internet, l\'IA travaille sur le processeur : patiente' : ''}`;
+  }, 1000);
   try {
     await moteur.createCompletion(prompt, {
-      nPredict: 300, sampling: { temp: .3, top_p: .9, penalty_repeat: 1.1 },
-      onNewToken: (t, p, texte) => { const el = $('#iaTexte'); if (el) { el.className = ''; el.style.whiteSpace = 'pre-line'; el.textContent = ('1.' + texte).replace(/\*\*/g, ''); } },
+      nPredict: base ? 300 : 150, sampling: { temp: .3, top_p: .9, penalty_repeat: 1.1 },
+      onNewToken: (t, p, texte) => { const el = $('#iaTexte'); if (el) { el.className = ''; el.style.whiteSpace = 'pre-line'; el.textContent = (amorce + texte).replace(/\*\*/g, ''); } },
     });
   } catch (e) { $('#iaTexte').textContent = 'Erreur de l\'IA : ' + (e.message || e); }
+  clearInterval(chrono);
+  if ($('#iaTexte')?.classList.contains('meta')) $('#iaTexte').textContent = 'L\'IA n\'a rien répondu. Reformule ta question, ou ouvre les fiches ci-dessous.';
   iaOccupee = false; $('#btnDemander').disabled = false;
 };
 let iaOccupee = false;
@@ -1009,7 +1041,11 @@ $('#btnFond').onclick = () => {
 };
 
 // Thème nuit rouge
-const appliquerTheme = () => { document.documentElement.dataset.theme = S.theme; $('#btnRouge').setAttribute('aria-pressed', S.theme === 'rouge'); };
+const appliquerTheme = () => {
+  document.documentElement.dataset.theme = S.theme; $('#btnRouge').setAttribute('aria-pressed', S.theme === 'rouge');
+  document.documentElement.classList.toggle('arcade', !!S.arcade); $('#btnArcade')?.setAttribute('aria-pressed', !!S.arcade);
+};
+$('#btnArcade') && ($('#btnArcade').onclick = () => { S.arcade = !S.arcade; save(); appliquerTheme(); });
 $('#btnRouge').onclick = () => { S.theme = S.theme === 'rouge' ? '' : 'rouge'; save(); appliquerTheme(); };
 appliquerTheme();
 
