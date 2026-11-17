@@ -426,6 +426,8 @@ function initPlan() {
   plan.on('load', () => {
     // Carte épurée (demande d'Aziz) : pas de bâtiments ni d'arrêts de transport ; seuls points affichés : essence, hôtels,
     // restaurants, hôpitaux (la classe « hospital » d'OpenMapTiles comprend les cliniques)
+    // Ciel peint (sinon transparent = bande grise au-dessus de l'horizon en vue inclinée) : la carte remplit tout l'écran
+    plan.setSky({ 'sky-color': '#BFDDF5', 'horizon-color': '#EEF3F6', 'fog-color': '#F2EFE9', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.6 });
     ['building', 'building-3d', 'poi_transit'].forEach(id => plan.getLayer(id) && plan.setLayoutProperty(id, 'visibility', 'none'));
     ['poi_r1', 'poi_r7', 'poi_r20'].forEach(id => {
       if (!plan.getLayer(id)) return;

@@ -365,8 +365,8 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 
 /* ---------- Thème « Studio » : univers de logiciel de création pro (d'après l'ambiance de Hype 4) ----------
    Fonds graphite en dégradé, panneaux anthracite à fines bordures, grands titres fins, touches verte et violette, apparitions animées.
-   Réglage dans Moi ; le mode survie et le mode nuit rouge passent devant. */
-:root.studio:not(.survie):not([data-theme="rouge"]) {
+   Réglage dans Moi ; il reste actif en mode survie ; le mode nuit rouge passe devant. */
+:root.studio:not([data-theme="rouge"]) {
   --bg: #1C1C1E; --bg2: rgba(255, 255, 255, .07); --surface: #2A2A2D; --surface2: #323236; --ligne: rgba(255, 255, 255, .09);
   --txt: #EDEDEF; --txt2: #A1A1A8; --txt3: #6E6E75;
   --accent: #35C2A0; --accent2: #9B6BFF; --ambre: #F5A623; --ok: #35C2A0; --vert: #35C2A0; --warn: #F5A623; --danger: #FF5A5F;
@@ -374,30 +374,30 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
   --ombre: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 12px 30px -14px rgba(0, 0, 0, .7); --r: 14px;
   color-scheme: dark;
 }
-:root.studio:not(.survie):not([data-theme="rouge"]) body { background: radial-gradient(120% 60% at 50% 0%, #4A4A4F 0%, #2A2A2D 45%, #161618 100%) fixed #161618; }
-:root.studio:not(.survie):not([data-theme="rouge"]) .titre { font-weight: 300; font-size: 36px; letter-spacing: -.02em; color: #F2F2F4; }
-:root.studio:not(.survie):not([data-theme="rouge"]) .k { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--txt3); }
-:root.studio:not(.survie):not([data-theme="rouge"]) :is(.carte, #fiches li, .plan-wrap) { border: 1px solid var(--ligne); }
-:root.studio:not(.survie):not([data-theme="rouge"]) .top { border-bottom-color: rgba(255, 255, 255, .06); }
-:root.studio:not(.survie):not([data-theme="rouge"]) .btn { border-radius: 9px; border: 1px solid rgba(255, 255, 255, .08); }
-:root.studio:not(.survie):not([data-theme="rouge"]) .btn.primaire, :root.studio:not(.survie):not([data-theme="rouge"]) .chip.on { background: linear-gradient(#3FD3AF, #2BA987); color: #0F2A23; border-color: transparent; }
-:root.studio:not(.survie):not([data-theme="rouge"]) .chip { border-radius: 8px; border: 1px solid rgba(255, 255, 255, .06); }
-:root.studio:not(.survie):not([data-theme="rouge"]) .segment { border-radius: 9px; }
-:root.studio:not(.survie):not([data-theme="rouge"]) .segment button.on { background: #4A4A50; color: #fff; }
-:root.studio:not(.survie):not([data-theme="rouge"]) input { background: #1F1F22; border: 1px solid rgba(255, 255, 255, .1); border-radius: 9px; }
-:root.studio:not(.survie):not([data-theme="rouge"]) input:focus { outline: 2px solid var(--accent2); outline-offset: 0; }
-:root.studio:not(.survie):not([data-theme="rouge"]) .proches .pastille { background: #1F1F22; border: 1px solid var(--ligne); border-radius: 9px; }
-:root.studio:not(.survie):not([data-theme="rouge"]) .tabs { border-radius: 18px; }
-:root.studio:not(.survie):not([data-theme="rouge"]) .tabs button.active { color: var(--accent); background: rgba(53, 194, 160, .12); }
+:root.studio:not([data-theme="rouge"]) body { background: radial-gradient(120% 60% at 50% 0%, #4A4A4F 0%, #2A2A2D 45%, #161618 100%) fixed #161618; }
+:root.studio:not([data-theme="rouge"]) .titre { font-weight: 300; font-size: 36px; letter-spacing: -.02em; color: #F2F2F4; }
+:root.studio:not([data-theme="rouge"]) .k { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--txt3); }
+:root.studio:not([data-theme="rouge"]) :is(.carte, #fiches li, .plan-wrap) { border: 1px solid var(--ligne); }
+:root.studio:not([data-theme="rouge"]) .top { border-bottom-color: rgba(255, 255, 255, .06); }
+:root.studio:not([data-theme="rouge"]) .btn { border-radius: 9px; border: 1px solid rgba(255, 255, 255, .08); }
+:root.studio:not([data-theme="rouge"]) .btn.primaire, :root.studio:not([data-theme="rouge"]) .chip.on { background: linear-gradient(#3FD3AF, #2BA987); color: #0F2A23; border-color: transparent; }
+:root.studio:not([data-theme="rouge"]) .chip { border-radius: 8px; border: 1px solid rgba(255, 255, 255, .06); }
+:root.studio:not([data-theme="rouge"]) .segment { border-radius: 9px; }
+:root.studio:not([data-theme="rouge"]) .segment button.on { background: #4A4A50; color: #fff; }
+:root.studio:not([data-theme="rouge"]) input { background: #1F1F22; border: 1px solid rgba(255, 255, 255, .1); border-radius: 9px; }
+:root.studio:not([data-theme="rouge"]) input:focus { outline: 2px solid var(--accent2); outline-offset: 0; }
+:root.studio:not([data-theme="rouge"]) .proches .pastille { background: #1F1F22; border: 1px solid var(--ligne); border-radius: 9px; }
+:root.studio:not([data-theme="rouge"]) .tabs { border-radius: 18px; }
+:root.studio:not([data-theme="rouge"]) .tabs button.active { color: var(--accent); background: rgba(53, 194, 160, .12); }
 /* Liseré vert → violet sous l'en-tête, comme une piste de montage */
-:root.studio:not(.survie):not([data-theme="rouge"]) .top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); opacity: .8; }
+:root.studio:not([data-theme="rouge"]) .top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); opacity: .8; }
 /* Apparitions animées en changeant d'onglet (coupées si le téléphone demande moins d'animations) */
 @media (prefers-reduced-motion: no-preference) {
-  :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > * { animation: studioEntree .45s cubic-bezier(.2, .8, .2, 1) both; }
-  :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > *:nth-child(2) { animation-delay: .04s; } :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > *:nth-child(3) { animation-delay: .08s; }
-  :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > *:nth-child(4) { animation-delay: .12s; } :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > *:nth-child(n+5) { animation-delay: .16s; }
-  :root.studio:not(.survie):not([data-theme="rouge"]) .btn, :root.studio:not(.survie):not([data-theme="rouge"]) .chip { transition: transform .15s cubic-bezier(.2, .8, .2, 1), filter .15s; }
-  :root.studio:not(.survie):not([data-theme="rouge"]) .btn:hover, :root.studio:not(.survie):not([data-theme="rouge"]) .chip:hover { filter: brightness(1.12); }
+  :root.studio:not([data-theme="rouge"]) .vue.active > * { animation: studioEntree .45s cubic-bezier(.2, .8, .2, 1) both; }
+  :root.studio:not([data-theme="rouge"]) .vue.active > *:nth-child(2) { animation-delay: .04s; } :root.studio:not([data-theme="rouge"]) .vue.active > *:nth-child(3) { animation-delay: .08s; }
+  :root.studio:not([data-theme="rouge"]) .vue.active > *:nth-child(4) { animation-delay: .12s; } :root.studio:not([data-theme="rouge"]) .vue.active > *:nth-child(n+5) { animation-delay: .16s; }
+  :root.studio:not([data-theme="rouge"]) .btn, :root.studio:not([data-theme="rouge"]) .chip { transition: transform .15s cubic-bezier(.2, .8, .2, 1), filter .15s; }
+  :root.studio:not([data-theme="rouge"]) .btn:hover, :root.studio:not([data-theme="rouge"]) .chip:hover { filter: brightness(1.12); }
 }
 @keyframes studioEntree { from { opacity: 0; transform: translateY(14px); } }
 .fiche-rapide { margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: var(--bg2); }
