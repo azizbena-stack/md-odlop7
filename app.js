@@ -448,11 +448,11 @@ $('#btnPlein').onclick = () => {
 function vue3D(on) {
   en3D = on; $('#btn3D').textContent = on ? '2D' : '3D'; $('#btn3D').classList.toggle('on', on);
   if (!plan?.getSource('dem')) return;
-  if (!on) { plan.setTerrain(null); return plan.easeTo({ pitch: 0, bearing: 0 }); }
+  if (!on) { plan.setTerrain(null); return guidage || plan.easeTo({ pitch: 0, bearing: 0 }); }
   // Relief d'abord, inclinaison ensuite : sinon la caméra reste à l'altitude 0, « sous » la montagne, le temps que les altitudes arrivent
-  plan.setTerrain({ source: 'dem', exaggeration: 1.4 });
+  plan.setTerrain({ source: 'dem', exaggeration: 1.8 });
   // ponytail: 3D ouverte au zoom 11 à 13,5 : plus près, beaucoup de morceaux à dessiner (testé seulement en rendu logiciel, à vérifier sur téléphone)
-  plan.once('idle', () => en3D && plan.easeTo({ pitch: 60, zoom: Math.min(Math.max(plan.getZoom(), 11), 13.5) }));
+  plan.once('idle', () => en3D && !guidage && plan.easeTo({ pitch: 72, zoom: Math.min(Math.max(plan.getZoom(), 11), 14) }));
 }
 $('#btn3D').onclick = () => vue3D(!en3D);
 function majRelief() {
@@ -460,13 +460,61 @@ function majRelief() {
   if (plan?.getLayer('ombrage')) plan.setLayoutProperty('ombrage', 'visibility', S.relief === false ? 'none' : 'visible');
 }
 $('#btnRelief').onclick = () => { S.relief = S.relief === false; save(); majRelief(); };
-$('#btnCentrer').onclick = () => { suivre = true; if (!pos) return demarrerGps(); plan?.easeTo({ center: lnglat(ici()), zoom: Math.max(plan.getZoom(), 15) }); };
+$('#btnCentrer').onclick = () => { suivre = true; if (!pos) return demarrerGps(); if (guidage) return majGuidage(); plan?.easeTo({ center: lnglat(ici()), zoom: Math.max(plan.getZoom(), 15) }); };
 
 function majMoiPlan() {
   if (!plan || !pos) return;
+  if (guidage) return majGuidage();
   if (!moiMk) moiMk = marqueur(ici(), 'plan-moi'); else moiMk.setLngLat(lnglat(ici()));
   if (suivre && !S.route) plan.easeTo({ center: lnglat(ici()), zoom: Math.max(plan.getZoom(), 14) });
 }
+
+// ---------- Guidage façon GPS de voiture ----------
+// Flèche couchée sur la route, caméra inclinée qui suit avec la route vers le haut, prochaine consigne dans un bandeau.
+let guidage = false, navMk = null, cumul = [], cumulPour = null;
+function demarrerGuidage() {
+  if (!plan || !pos || !S.route?.geo?.length) return;
+  guidage = true; suivre = true; moiMk?.remove(); moiMk = null;
+  const el = document.createElement('div'); el.className = 'plan-nav';
+  el.innerHTML = '<svg viewBox="0 0 40 40"><path d="M20 3 L35 35 L20 27 L5 35Z"/></svg>';
+  navMk = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(lnglat(ici())).addTo(plan);
+  $('#navBandeau').hidden = false;
+  if (!$('.plan-wrap').classList.contains('plein')) $('#btnPlein').click(); // plein écran, comme un GPS de voiture
+  majGuidage();
+}
+function arreterGuidage(msg) {
+  guidage = false; navMk?.remove(); navMk = null; $('#navBandeau').hidden = true;
+  if ($('.plan-wrap').classList.contains('plein')) $('#btnPlein').click();
+  plan?.easeTo({ pitch: en3D ? 72 : 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 } });
+  majMoiPlan(); if (msg) $('#itiRes').textContent = msg;
+}
+// Point le plus proche sur le tracé, puis direction de la route ~30 m plus loin (marche même à l'arrêt, sans boussole)
+function suiviRoute(R, me) {
+  let i0 = 0, dmin = Infinity;
+  R.geo.forEach((p, i) => { const d = distance(me, p); if (d < dmin) { dmin = d; i0 = i; } });
+  let j = i0, l = 0; while (j < R.geo.length - 1 && l < 30) { l += distance(R.geo[j], R.geo[j + 1]); j++; }
+  return { i0, dmin, cap: bearing(me, R.geo[j === i0 ? Math.min(j + 1, R.geo.length - 1) : j]) };
+}
+function majGuidage() {
+  const R = S.route, me = ici(); if (!R || !navMk) return;
+  const { i0, dmin, cap: capRoute } = suiviRoute(R, me);
+  // En roulant, le cap du GPS est plus fiable ; à pied ou à l'arrêt, la direction de la route
+  const v = pos.coords.speed, cap = v > 2 && pos.coords.heading != null && !isNaN(pos.coords.heading) ? pos.coords.heading : capRoute;
+  navMk.setLngLat(lnglat(me)).setRotation(cap);
+  if (distance(me, R.dest.ll) < 30) return arreterGuidage(`Tu es arrivé : ${R.dest.nom}.`);
+  // Distances le long de la route (cumul calculé une fois par itinéraire)
+  if (R !== cumulPour) { cumulPour = R; cumul = [0]; R.geo.slice(1).forEach((p, i) => cumul.push(cumul[i] + distance(R.geo[i], p))); }
+  const fin = cumul[cumul.length - 1] - cumul[i0] + dmin;
+  // Prochaine manœuvre : la première étape dont le point est plus loin que moi sur le tracé
+  const idx = p => R.geo.reduce((b, q, i) => distance(p, q) < distance(p, R.geo[b]) ? i : b, 0);
+  const prochaine = (R.etapes || []).filter(e => e[2]).map(e => ({ t: e[0], i: idx(e[2]), ll: e[2] })).find(e => e.i > i0);
+  const dEtape = prochaine ? cumul[prochaine.i] - cumul[i0] + dmin : fin;
+  $('#navConsigne').textContent = dmin > 60 ? 'Tu t\'écartes de l\'itinéraire : rejoins la ligne bleue' : prochaine ? prochaine.t : 'Tout droit jusqu\'à l\'arrivée';
+  $('#navDist').textContent = `Dans ${fmtDist(dEtape)} · arrivée à ${fmtDist(fin)}`;
+  if (suivre) plan.easeTo({ center: lnglat(me), bearing: cap, pitch: 70, zoom: 17, duration: 900,
+    padding: { top: Math.round(plan.getContainer().clientHeight * .45), bottom: 0, left: 0, right: 0 } });
+}
+$('#navStop').onclick = () => arreterGuidage();
 
 // Refuges, points d'eau, hôpitaux… et mes points, quand on zoome assez
 function majPointsPlan() {
@@ -584,6 +632,7 @@ function majModes() { $$('#modes .chip').forEach(c => c.classList.toggle('on', c
 $('#modes').onclick = e => { const b = e.target.closest('[data-mode]'); if (!b) return; modeIti = b.dataset.mode; majModes(); if (destination) calculerIti(); };
 
 function choisirDest(ll, nom) {
+  if (guidage) arreterGuidage();
   destination = { ll: ll.map(x => +x.toFixed(5)), nom };
   if (plan) { destMk?.remove(); destMk = marqueurDest(ll); }
   calculerIti();
@@ -615,9 +664,9 @@ async function calculerIti() {
     S.route = {
       dest: destination, mode: modeIti, d: rt.distance, t: rt.duration,
       geo: rt.geometry.coordinates.map(([lo, la]) => [+la.toFixed(5), +lo.toFixed(5)]),
-      etapes: rt.legs[0].steps.map(s => [consigne(s), Math.round(s.distance)]),
+      etapes: rt.legs[0].steps.map(s => [consigne(s), Math.round(s.distance), [+s.maneuver.location[1].toFixed(5), +s.maneuver.location[0].toFixed(5)]]),
     };
-    save(); dessinerRoute(S.route, true);
+    save(); dessinerRoute(S.route, !pos); if (pos) demarrerGuidage();
   } catch (e) {
     const d = distance(dep, destination.ll);
     $('#itiRes').innerHTML = (navigator.onLine ? `Itinéraire impossible (${esc(e.message)}).` : 'Pas de réseau : l\'itinéraire se calcule en ligne.')
