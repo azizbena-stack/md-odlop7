@@ -11,7 +11,12 @@ try { Object.assign(S, JSON.parse(localStorage.getItem('repere') || '{}')); } ca
 const save = () => { try { localStorage.setItem('repere', JSON.stringify(S)); } catch {} };
 
 // ---------- Hors ligne ----------
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // La page n'est isolée (IA multi-cœurs) qu'une fois servie par le service worker : on recharge une seule fois pour ça
+  const isoler = () => { if (!self.crossOriginIsolated && navigator.serviceWorker.controller) try { if (!sessionStorage.coi) { sessionStorage.coi = 1; location.reload(); } } catch {} };
+  navigator.serviceWorker.addEventListener('controllerchange', isoler); isoler();
+}
 const majReseau = () => {
   const el = $('#etatReseau');
   el.textContent = navigator.onLine ? 'Prêt hors réseau' : 'Hors réseau · tout marche';
@@ -186,7 +191,7 @@ let meteoEnCours = false;
 
 async function telechargerMeteo() {
   if (!pos) { demarrerGps(); return popup('<h2>Position inconnue</h2><p>Active le GPS : la météo est téléchargée pour l\'endroit où tu es.</p>'); }
-  if (!navigator.onLine) return popup('<h2>Pas de réseau</h2><p>Il faut du réseau pour télécharger la météo. Ensuite, elle reste lisible hors ligne pendant 7 jours.</p>');
+  if (!navigator.onLine) return popup('<h2>Pas de réseau</h2><p>La météo ne se met pas à jour hors connexion : il faut du réseau (wifi ou 4G/5G). Pense à la mettre à jour avant le départ ; ensuite, elle reste lisible hors ligne pendant 7 jours.</p>');
   if (meteoEnCours) return; meteoEnCours = true; $('#btnMeteo').textContent = 'Téléchargement…';
   const [la, lo] = ici().map(v => v.toFixed(2)); // ~1 km : suffisant pour la météo, ne partage pas la position exacte
   try {
@@ -855,7 +860,7 @@ function majIA() {
 }
 majIA();
 const nouvelleIA = async () => new (wllamaCls ??= (await import('./vendor/wllama.js')).Wllama)(
-  { 'single-thread/wllama.wasm': new URL('vendor/wllama.wasm', location.href).href },
+  { 'single-thread/wllama.wasm': new URL('vendor/wllama.wasm', location.href).href, 'multi-thread/wllama.wasm': new URL('vendor/wllama-mt.wasm', location.href).href },
   { allowOffline: true, suppressNativeLog: true, logger: { debug() {}, log() {}, warn: console.warn, error: console.error } });
 $('#iaModeles').onclick = async e => {
   const m = e.target.closest('[data-m]')?.dataset.m;
@@ -876,7 +881,9 @@ async function demarrerIA() {
     // wllama 2.3.7 : dernière version en mémoire 32 bits (Safari sur iPhone ne gère pas la mémoire 64 bits des versions suivantes)
     const w = await nouvelleIA();
     await w.loadModelFromUrl(MODELE(), {
-      n_ctx: 2048, n_threads: 1,
+      n_ctx: 2048,
+      // Page isolée : tous les cœurs sauf un (garde l'écran fluide), 4 au plus ; sinon 1 seul possible
+      n_threads: self.crossOriginIsolated ? Math.min(4, Math.max(1, (navigator.hardwareConcurrency || 2) - 1)) : 1,
       progressCallback: ({ loaded, total }) => {
         const p = total ? Math.round(loaded / total * 100) : 0;
         prog.firstElementChild.style.width = p + '%';
@@ -884,7 +891,7 @@ async function demarrerIA() {
       },
     });
     moteur = w; S.ia = MODELE(); save();
-    iaEtat('Prête · fonctionne sans internet'); $('#btnIA').hidden = true; prog.hidden = true;
+    iaEtat(`Prête · fonctionne sans internet · ${self.crossOriginIsolated ? 'plusieurs cœurs' : '1 cœur'}`); $('#btnIA').hidden = true; prog.hidden = true;
     return moteur;
   } catch (e) {
     console.error(e);
@@ -912,15 +919,18 @@ $('#btnDemander').onclick = async () => {
   const sources = chercher(q).slice(0, 3), wiki = chercherWiki(q, 2), rep = $('#reponse');
   rep.hidden = false;
   const liens = `<div class="src">${sources.map(f => `<button class="chip" data-ouvre="${f.id}">${f.titre}</button>`).join('')}${wiki.map(a => `<button class="chip" data-wiki="${esc(a.t)}">Wikipédia : ${esc(a.t)}</button>`).join('')}</div>`;
+  // Solution immédiate : les gestes de la fiche la plus liée, sans attendre l'IA
+  const mots = motsCle(q), titreLie = t => mots.length && mots.filter(m => contient(norm(t), m)).length > mots.length / 2;
+  const f = sources.find(x => titreLie(x.titre + ' ' + x.mots)), w = wiki.find(a => titreLie(a.t));
+  const gestes = f ? (f.corps.match(/<(ol|ul)>[\s\S]*?<\/\1>/) || [''])[0] : '';
+  const rapide = gestes ? `<div class="fiche-rapide"><div class="k">${f.titre} · à faire tout de suite</div>${gestes}</div>` : '';
   if (!moteur) {
-    if (iaInstallee()) { rep.textContent = 'Démarrage de l\'IA…'; await chargerIA(); }
-    if (!moteur) { rep.innerHTML = (sources.length || wiki.length ? '<b>Ce qui répond à ta question :</b>' : 'Rien ne correspond. Essaie avec d\'autres mots.') + liens; return; }
+    if (iaInstallee()) { rep.innerHTML = `<div class="meta">Démarrage de l'IA…</div>${rapide}${liens}`; await chargerIA(); }
+    if (!moteur) { rep.innerHTML = (rapide || (sources.length || wiki.length ? '<b>Ce qui répond à ta question :</b>' : 'Rien ne correspond. Essaie avec d\'autres mots.')) + liens; return; }
   }
   if (iaOccupee) return;
   // ponytail: une seule source coupée à 600 caractères (la fiche, sinon l'article Wikipédia) : sur le processeur d'un téléphone, chaque mot lu coûte du temps
-  // Seulement une source vraiment liée (plus de la moitié des mots de la question dans son titre) : une fiche hors sujet égare l'IA et la ralentit
-  const mots = motsCle(q), titreLie = t => mots.length && mots.filter(m => contient(norm(t), m)).length > mots.length / 2;
-  const f = sources.find(x => titreLie(x.titre + ' ' + x.mots)), w = wiki.find(a => titreLie(a.t));
+  // L'IA ne reçoit que la source vraiment liée (f ou w ci-dessus) : une fiche hors sujet l'égare et la ralentit
   const base = f ? `${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 600)}`
     : w ? `${w.t}\n${w.x.replace(/^=+.*=+$/gm, '').replace(/\n+/g, '\n').slice(0, 600)}` : '';
   // ponytail: prompt Qwen (ChatML) écrit à la main. Avec une fiche, réponse amorcée par « 1. » : sans ça le petit modèle (0,5B)
@@ -931,7 +941,7 @@ $('#btnDemander').onclick = async () => {
     : `<|im_start|>system\nTu es un guide de survie. Réponds en français, en 2 ou 3 phrases courtes et concrètes.<|im_end|>\n<|im_start|>user\n${q}<|im_end|>\n<|im_start|>assistant\n`;
   // Les fiches s'affichent tout de suite, la réponse de l'IA s'écrit au-dessus au fur et à mesure.
   // Avant le premier mot, l'IA lit (sur le processeur, ça peut prendre une minute) : un compteur montre qu'elle travaille.
-  rep.innerHTML = `<div id="iaTexte" class="meta">${base ? 'Repère lit la fiche' : 'Repère réfléchit'}…</div>${liens}`;
+  rep.innerHTML = `<div id="iaTexte" class="meta">${base ? 'Repère lit la fiche' : 'Repère réfléchit'}…</div>${rapide}${liens}`;
   iaOccupee = true; $('#btnDemander').disabled = true;
   const t0 = Date.now(), chrono = setInterval(() => {
     const el = $('#iaTexte'), s = Math.round((Date.now() - t0) / 1000);
@@ -939,7 +949,7 @@ $('#btnDemander').onclick = async () => {
   }, 1000);
   try {
     await moteur.createCompletion(prompt, {
-      nPredict: base ? 300 : 150, sampling: { temp: .3, top_p: .9, penalty_repeat: 1.1 },
+      nPredict: base ? 200 : 120, // assez pour 5 étapes : au-delà le petit modèle brode sampling: { temp: .3, top_p: .9, penalty_repeat: 1.1 },
       onNewToken: (t, p, texte) => { const el = $('#iaTexte'); if (el) { el.className = ''; el.style.whiteSpace = 'pre-line'; el.textContent = (amorce + texte).replace(/\*\*/g, ''); } },
     });
   } catch (e) { $('#iaTexte').textContent = 'Erreur de l\'IA : ' + (e.message || e); }
@@ -1223,6 +1233,8 @@ $('#radios').onclick = e => {
   if (radioOn === b.dataset.r) { radioOn = null; lecteur.pause(); lecteur.removeAttribute('src'); }
   else {
     radioOn = b.dataset.r;
+    // ponytail: Europe 1 n'autorise pas les autres sites (pas de CORS) : sans crossOrigin elle passe partout sauf Safari isolé
+    lecteur.crossOrigin = radioOn === 'europe1' ? null : 'anonymous';
     lecteur.src = STATIONS[radioOn][1];
     lecteur.play().catch(() => majRadio('Lecture refusée : touche à nouveau la station'));
     if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: STATIONS[radioOn][0], artist: 'Repère · radio' });

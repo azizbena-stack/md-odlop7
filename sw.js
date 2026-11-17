@@ -1,12 +1,25 @@
 // Hors ligne : tout est mis en cache à l'installation, puis servi sans réseau.
-const V = 'repere-v7', TUILES = 'repere-tuiles', ZONES = 'repere-zones';
+const V = 'repere-v8', TUILES = 'repere-tuiles', ZONES = 'repere-zones';
 const FICHIERS = ['./', 'index.html', 'style.css', 'app.js', 'geo.js', 'guide.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
-  'data/communes.json', 'data/points.json', 'data/wiki.json', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css'];
+  'data/communes.json', 'data/points.json', 'data/wiki.json', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css', 'vendor/wllama.js', 'vendor/wllama.wasm', 'vendor/wllama-mt.wasm'];
 // La météo (api.open-meteo.com) n'est pas mise en cache ici : l'app la garde elle-même dans le téléphone.
 
 self.addEventListener('install', e => e.waitUntil(caches.open(V).then(c => c.addAll(FICHIERS)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(
   caches.keys().then(ks => Promise.all(ks.filter(k => ![V, TUILES, ZONES].includes(k)).map(k => caches.delete(k)))).then(() => self.clients.claim())));
+
+// Isolation cross-origin (COOP/COEP) ajoutée par le service worker, GitHub Pages ne sachant pas le faire :
+// elle débloque l'IA sur plusieurs cœurs (SharedArrayBuffer). « credentialless » laisse passer les contenus des autres sites ;
+// Safari ne le connaît pas, il reçoit « require-corp » (les autres sites doivent alors autoriser Repère : radio Europe 1 refusée).
+const SAFARI = /Safari/.test(navigator.userAgent) && !/Chrome|Chromium|CriOS|FxiOS|Android|Edg/.test(navigator.userAgent);
+const isoler = res => {
+  if (!res || res.type === 'opaque' || res.status === 0) return res;
+  const h = new Headers(res.headers);
+  h.set('Cross-Origin-Opener-Policy', 'same-origin');
+  h.set('Cross-Origin-Embedder-Policy', SAFARI ? 'require-corp' : 'credentialless');
+  h.set('Cross-Origin-Resource-Policy', 'same-origin');
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+};
 
 let ajouts = 0;
 self.addEventListener('fetch', e => {
@@ -43,5 +56,5 @@ self.addEventListener('fetch', e => {
   e.respondWith(caches.match(e.request, { ignoreSearch: true }).then(r => {
     if (r) { e.waitUntil(reseau.catch(() => {})); return r; }
     return reseau.catch(() => e.request.mode === 'navigate' ? caches.match('index.html') : Response.error());
-  }));
+  }).then(isoler));
 });
