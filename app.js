@@ -430,17 +430,19 @@ function majPointsPlan() {
 
 // Recherche d'une commune dans la liste hors ligne
 const nomCommune = c => `${c[0]} (${c[4]})`;
+// Les communes proches passent devant, puis les plus peuplées
+const rang = c => Math.log(c[3] + 1) - (pos ? distance(ici(), [c[1], c[2]]) / 30000 : 0);
 $('#dest').oninput = () => {
   const q = norm($('#dest').value.trim()); if (q.length < 2) return;
-  $('#destListe').innerHTML = COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => b[3] - a[3]).slice(0, 8)
+  $('#destListe').innerHTML = COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a)).slice(0, 8)
     .map(c => `<option value="${esc(nomCommune(c))}">`).join('');
 };
 $('#dest').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnIti').click(); });
 $('#btnIti').onclick = () => {
   const v = $('#dest').value.trim(), q = norm(v.replace(/\s*\(\w+\)$/, ''));
   if (!v) return destination ? calculerIti() : $('#dest').focus();
-  const c = COMMUNES.find(c => nomCommune(c) === v) || COMMUNES.filter(c => norm(c[0]) === q).sort((a, b) => b[3] - a[3])[0]
-    || COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => b[3] - a[3])[0];
+  const c = COMMUNES.find(c => nomCommune(c) === v) || COMMUNES.filter(c => norm(c[0]) === q).sort((a, b) => rang(b) - rang(a))[0]
+    || COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a))[0];
   if (!c) return $('#itiRes').textContent = 'Commune introuvable. Vérifie l\'orthographe ou touche la carte.';
   choisirDest([c[1], c[2]], c[0]);
 };
@@ -697,10 +699,11 @@ async function demarrerIA() {
   iaEtat(iaInstallee() ? 'Démarrage…' : 'Préparation…');
   try {
     const { Wllama } = await import('./vendor/wllama.js');
-    const w = new Wllama({ default: new URL('vendor/wllama.wasm', location.href).href },
-      { allowOffline: true, logger: { debug() {}, log() {}, warn: console.warn, error: console.error } });
+    // wllama 2.3.7 : dernière version en mémoire 32 bits (Safari sur iPhone ne gère pas la mémoire 64 bits des versions suivantes)
+    const w = new Wllama({ 'single-thread/wllama.wasm': new URL('vendor/wllama.wasm', location.href).href },
+      { allowOffline: true, suppressNativeLog: true, logger: { debug() {}, log() {}, warn: console.warn, error: console.error } });
     await w.loadModelFromUrl(MODELE, {
-      n_ctx: 4096,
+      n_ctx: 2048, n_threads: 1,
       progressCallback: ({ loaded, total }) => {
         const p = total ? Math.round(loaded / total * 100) : 0;
         prog.firstElementChild.style.width = p + '%';
@@ -734,28 +737,32 @@ function contexteSituation() {
 $('#btnDemander').onclick = async () => {
   const q = $('#question').value.trim(); if (!q) return $('#question').focus();
   const sources = chercher(q).slice(0, 3), rep = $('#reponse');
-  // ponytail: 2 fiches coupées à 1 200 caractères, sinon la lecture du contexte est trop lente sur le processeur d'un téléphone
-  const pourIA = sources.slice(0, 2);
   rep.hidden = false;
   const liens = `<div class="src">${sources.map(f => `<button class="chip" data-ouvre="${f.id}">${f.titre}</button>`).join('')}</div>`;
   if (!moteur) {
     if (iaInstallee()) { rep.textContent = 'Démarrage de l\'IA…'; await chargerIA(); }
     if (!moteur) { rep.innerHTML = (sources.length ? '<b>Fiches qui répondent à ta question :</b>' : 'Aucune fiche ne correspond. Essaie avec d\'autres mots.') + liens; return; }
   }
-  const base = pourIA.map(f => `### ${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 1200)}`).join('\n\n');
+  if (iaOccupee) return;
+  // ponytail: une seule fiche coupée à 900 caractères : sur le processeur d'un téléphone, chaque mot lu coûte du temps
+  const f = sources[0];
+  const base = f ? `${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 900)}` : '(aucune fiche)';
   const msgs = [
-    { role: 'system', content: `Tu es Repère, un assistant de survie hors ligne. Réponds en français, en tutoyant, en 3 à 6 étapes courtes et concrètes. Base-toi UNIQUEMENT sur les fiches fournies. Si elles ne contiennent pas la réponse, dis-le simplement. Si la vie est en danger, commence par « Appelle le 112 ». N'invente jamais de plante comestible ni de dosage.\n\nSituation : ${contexteSituation()}\n\nFiches :\n${base || '(aucune fiche pertinente)'}` },
+    { role: 'system', content: `Tu es Repère, assistant de survie. Réponds en français, en tutoyant, en 3 à 5 étapes courtes. Utilise seulement la fiche. Danger de mort : commence par « Appelle le 112 ». N'invente ni plante ni dosage.\n${contexteSituation()}\n\nFiche : ${base}` },
     { role: 'user', content: q },
   ];
-  rep.textContent = 'Repère réfléchit…';
+  // Les fiches s'affichent tout de suite, la réponse de l'IA s'écrit au-dessus au fur et à mesure
+  rep.innerHTML = `<div id="iaTexte" class="meta">Repère lit la fiche…</div>${liens}`;
+  iaOccupee = true; $('#btnDemander').disabled = true;
   try {
-    let out = '';
-    for await (const ch of await moteur.createChatCompletion({ messages: msgs, stream: true, temperature: .3, max_tokens: 380 })) {
-      out += ch.choices[0]?.delta?.content || ''; rep.textContent = out;
-    }
-    rep.insertAdjacentHTML('beforeend', liens);
-  } catch (e) { rep.innerHTML = 'Erreur de l\'IA : ' + esc(e.message || e) + liens; }
+    await moteur.createChatCompletion(msgs, {
+      nPredict: 300, sampling: { temp: .3, top_p: .9, penalty_repeat: 1.1 },
+      onNewToken: (t, p, texte) => { const el = $('#iaTexte'); if (el) { el.className = ''; el.textContent = texte; } },
+    });
+  } catch (e) { $('#iaTexte').textContent = 'Erreur de l\'IA : ' + (e.message || e); }
+  iaOccupee = false; $('#btnDemander').disabled = false;
 };
+let iaOccupee = false;
 $('#question').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnDemander').click(); });
 $('#reponse').onclick = e => { const b = e.target.closest('[data-ouvre]'); if (b) ouvrirFiche(b.dataset.ouvre); };
 
