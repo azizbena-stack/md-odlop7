@@ -15,12 +15,16 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
   // La page n'est isolée (IA multi-cœurs) qu'une fois servie par le service worker : on recharge une seule fois pour ça
   const isoler = () => { if (!self.crossOriginIsolated && navigator.serviceWorker.controller) try { if (!sessionStorage.coi) { sessionStorage.coi = 1; location.reload(); } } catch {} };
-  navigator.serviceWorker.addEventListener('controllerchange', isoler); isoler();
+  // Nouvelle version installée pendant que l'app est ouverte : on recharge une fois pour l'afficher tout de suite
+  const avaitSW = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => avaitSW ? location.reload() : isoler()); isoler();
 }
 const majReseau = () => {
   const el = $('#etatReseau');
   el.textContent = navigator.onLine ? 'Prêt hors réseau' : 'Hors réseau · tout marche';
 };
+// Numéro de version (onglet Moi) : le nom du cache du service worker, pour savoir quelle version tourne
+window.caches?.keys().then(k => { const v = k.filter(x => /^repere-v\d+$/.test(x)).sort((a, b) => b.slice(8) - a.slice(8))[0]; if (v) $('#version').textContent = 'Version ' + v.slice(8); }).catch(() => {});
 addEventListener('online', majReseau); addEventListener('offline', majReseau); majReseau();
 
 // ---------- Navigation ----------
