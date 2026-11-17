@@ -24,7 +24,7 @@ function ouvrir(vue) {
   $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.vue === vue || (b.dataset.vue === 'carte' && vue === 'boussole')));
   $$('[data-seg]').forEach(b => b.classList.toggle('on', b.dataset.seg === vue));
   scrollTo({ top: 0 });
-  if (vue === 'carte') setTimeout(initPlan); // Leaflet a besoin d'un conteneur visible
+  if (vue === 'carte') setTimeout(initPlan); // la carte a besoin d'un conteneur visible
 }
 $$('.tabs button').forEach(b => b.onclick = () => ouvrir(b.dataset.vue));
 $$('[data-seg]').forEach(b => b.onclick = () => ouvrir(b.dataset.seg));
@@ -375,58 +375,147 @@ function majTrace() {
 majTrace();
 
 // ---------- Carte et itinéraire ----------
-// Fonds OpenStreetMap (plan) et OpenTopoMap (relief) : les tuiles déjà vues restent dans le téléphone (voir sw.js).
+// MapLibre + tuiles vectorielles OpenFreeMap (gratuites, sans clé) : vue du dessus (2D) ou 3D avec relief et bâtiments.
+// Altitudes : AWS Terrain Tiles (Mapzen). Les morceaux de carte vus ou téléchargés restent dans le téléphone (voir sw.js).
 // Itinéraire : serveurs OSRM publics de FOSSGIS (à pied, vélo, voiture). Il faut du réseau pour le calculer,
 // ensuite il est gardé dans le téléphone et la boussole peut prendre le relais en ligne droite.
-const FONDS = {
-  plan: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap' }],
-  topo: ['https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, subdomains: 'abc', crossOrigin: true, attribution: '© OpenStreetMap, SRTM · OpenTopoMap' }],
-};
+const STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const MODES = { foot: ['routed-foot', 'à pied'], bike: ['routed-bike', 'à vélo'], car: ['routed-car', 'en voiture'] };
-let plan = null, fondLy = null, moiMk = null, routeLy = null, destMk = null, pointsLy = null, suivre = true;
+let plan = null, moiMk = null, destMk = null, ptsMk = [], suivre = true, en3D = false;
 let destination = S.route?.dest || null, modeIti = S.route?.mode || 'foot';
+const lnglat = ([la, lo]) => [lo, la];
+const geoRoute = R => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: (R?.geo || []).map(lnglat) } });
+function marqueur(ll, cls, html = '', anchor = 'center') {
+  const el = document.createElement('div'); el.className = cls; el.innerHTML = html;
+  return new maplibregl.Marker({ element: el, anchor }).setLngLat(lnglat(ll)).addTo(plan);
+}
+const marqueurDest = ll => marqueur(ll, 'plan-cible', '<div class="plan-dest"></div>', 'bottom');
 
 function initPlan() {
-  if (!window.L) return $('#itiRes').textContent = 'La carte n\'a pas pu se charger.';
-  if (plan) return plan.invalidateSize();
-  plan = L.map('plan', { zoomControl: false, attributionControl: true }).setView(pos ? ici() : [46.6, 2.4], pos ? 14 : 6);
-  plan.attributionControl.setPrefix(false);
-  pointsLy = L.layerGroup().addTo(plan);
-  changerFond(S.fond || 'plan');
-  plan.on('click', e => choisirDest([e.latlng.lat, e.latlng.lng], 'Point sur la carte'));
+  if (!window.maplibregl) return $('#itiRes').textContent = 'La carte n\'a pas pu se charger.';
+  if (plan) return plan.resize();
+  try {
+    plan = new maplibregl.Map({ container: 'plan', style: STYLE, center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 75, attributionControl: { compact: true } });
+  } catch { return $('#plan').innerHTML = '<p class="meta" style="padding:20px">Ce navigateur ne peut pas afficher la carte (WebGL désactivé). La boussole et l\'itinéraire restent disponibles.</p>'; }
+  plan.on('load', () => {
+    const src = { type: 'raster-dem', tiles: [DEM], encoding: 'terrarium', tileSize: 256, maxzoom: 12 };
+    plan.addSource('dem', { ...src, attribution: 'Relief © Mapzen, AWS Terrain Tiles' });
+    plan.addSource('dem-ombre', src); // MapLibre conseille une source à part pour l'ombrage
+    plan.addLayer({ id: 'ombrage', type: 'hillshade', source: 'dem-ombre', layout: { visibility: S.relief === false ? 'none' : 'visible' }, paint: { 'hillshade-exaggeration': .35 } }, 'aeroway_fill');
+    plan.addSource('route', { type: 'geojson', data: geoRoute(null) });
+    plan.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#007AFF', 'line-width': 6, 'line-opacity': .85 } });
+    if (S.route) dessinerRoute(S.route, false);
+    if (en3D) vue3D(true);
+  });
+  plan.on('error', e => console.warn('carte', e.error?.message)); // hors ligne : morceaux manquants, la carte reste utilisable
+  plan.on('click', e => { if (!e.originalEvent.target.closest?.('.maplibregl-marker')) choisirDest([e.lngLat.lat, e.lngLat.lng], 'Point sur la carte'); });
   plan.on('dragstart', () => { suivre = false; });
   plan.on('moveend', majPointsPlan);
-  if (S.route) dessinerRoute(S.route, false);
-  majMoiPlan(); majPointsPlan(); majModes();
+  majMoiPlan(); majPointsPlan(); majModes(); majRelief(); majZones();
 }
-function changerFond(f) {
-  S.fond = f; save();
-  fondLy?.remove(); fondLy = L.tileLayer(...FONDS[f]).addTo(plan);
-  $('#btnFond').textContent = f === 'plan' ? 'Relief' : 'Plan';
+// 2D = vue du dessus (à vol d'oiseau) ; 3D = carte inclinée avec le relief en volume et les bâtiments
+function vue3D(on) {
+  en3D = on; $('#btn3D').textContent = on ? '2D' : '3D'; $('#btn3D').classList.toggle('on', on);
+  if (!plan?.getSource('dem')) return;
+  if (!on) { plan.setTerrain(null); return plan.easeTo({ pitch: 0, bearing: 0 }); }
+  // Relief d'abord, inclinaison ensuite : sinon la caméra reste à l'altitude 0, « sous » la montagne, le temps que les altitudes arrivent
+  plan.setTerrain({ source: 'dem', exaggeration: 1.4 });
+  // ponytail: 3D ouverte au zoom 11 à 13,5 : plus près, beaucoup de morceaux à dessiner (testé seulement en rendu logiciel, à vérifier sur téléphone)
+  plan.once('idle', () => en3D && plan.easeTo({ pitch: 60, zoom: Math.min(Math.max(plan.getZoom(), 11), 13.5) }));
 }
-$('#btnFond').onclick = () => plan && changerFond(S.fond === 'plan' ? 'topo' : 'plan');
-$('#btnCentrer').onclick = () => { suivre = true; if (!pos) return demarrerGps(); plan?.setView(ici(), Math.max(plan.getZoom(), 15)); };
+$('#btn3D').onclick = () => vue3D(!en3D);
+function majRelief() {
+  $('#btnRelief').classList.toggle('on', S.relief !== false);
+  if (plan?.getLayer('ombrage')) plan.setLayoutProperty('ombrage', 'visibility', S.relief === false ? 'none' : 'visible');
+}
+$('#btnRelief').onclick = () => { S.relief = S.relief === false; save(); majRelief(); };
+$('#btnCentrer').onclick = () => { suivre = true; if (!pos) return demarrerGps(); plan?.easeTo({ center: lnglat(ici()), zoom: Math.max(plan.getZoom(), 15) }); };
 
 function majMoiPlan() {
   if (!plan || !pos) return;
-  if (!moiMk) moiMk = L.circleMarker(ici(), { radius: 8, color: '#fff', weight: 3, fillColor: '#007AFF', fillOpacity: 1 }).addTo(plan);
-  else moiMk.setLatLng(ici());
-  if (suivre && !routeLy) plan.setView(ici(), Math.max(plan.getZoom(), 14));
+  if (!moiMk) moiMk = marqueur(ici(), 'plan-moi'); else moiMk.setLngLat(lnglat(ici()));
+  if (suivre && !S.route) plan.easeTo({ center: lnglat(ici()), zoom: Math.max(plan.getZoom(), 14) });
 }
 
 // Refuges, points d'eau, hôpitaux… et mes points, quand on zoome assez
 function majPointsPlan() {
   if (!plan) return;
-  pointsLy.clearLayers();
+  ptsMk.forEach(m => m.remove()); ptsMk = [];
   const b = plan.getBounds();
-  S.points.forEach(p => L.circleMarker([p.lat, p.lon], { radius: 6, color: '#fff', weight: 2, fillColor: '#34C759', fillOpacity: 1 }).bindPopup(esc(p.nom)).addTo(pointsLy));
+  S.points.forEach(p => ptsMk.push(marqueur([p.lat, p.lon], 'plan-mien').setPopup(new maplibregl.Popup({ offset: 10 }).setText(p.nom))));
   if (plan.getZoom() < 11) return;
-  POINTS.filter(p => b.contains([p[2], p[3]])).slice(0, 300).forEach(p => {
+  POINTS.filter(p => b.contains([p[3], p[2]])).slice(0, 300).forEach(p => {
     const [ico, lib] = TYPES[p[0]] || ['•', p[0]];
-    L.marker([p[2], p[3]], { icon: L.divIcon({ className: 'plan-pt', html: ico, iconSize: [26, 26] }) })
-      .bindPopup(`<b>${esc(p[1])}</b><br>${lib}${p[4] ? ' · ' + p[4] + ' m' : ''}`).addTo(pointsLy);
+    ptsMk.push(marqueur([p[2], p[3]], 'plan-pt', ico)
+      .setPopup(new maplibregl.Popup({ offset: 14 }).setHTML(`<b>${esc(p[1])}</b><br>${lib}${p[4] ? ' · ' + p[4] + ' m' : ''}`)));
   });
 }
+
+// ---------- Carte hors ligne : télécharger la zone affichée ----------
+// ponytail: tout jusqu'au zoom 14 (au-delà MapLibre agrandit les tuiles vectorielles), relief jusqu'au zoom 12 (maxzoom de la source) ; plafond 8 000 morceaux
+const ZONES = 'repere-zones';
+const cleTuile = u => u.replace(/\/planet\/[^/]+\/(\d+\/\d+\/\d+\.pbf)$/, '/planet/$1'); // même règle que sw.js (la version change chaque semaine)
+function tuilesZone(b, zmax, zmin = 0) {
+  const l = [];
+  for (let z = zmin; z <= zmax; z++) {
+    const n = 2 ** z, X = lo => Math.min(n - 1, Math.floor((lo + 180) / 360 * n));
+    const Y = la => { const r = la * Math.PI / 180; return Math.min(n - 1, Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n)); };
+    for (let x = X(b.getWest()); x <= X(b.getEast()); x++) for (let y = Y(b.getNorth()); y <= Y(b.getSouth()); y++) l.push([z, x, y]);
+  }
+  return l;
+}
+const marge = (b, d) => new maplibregl.LngLatBounds([b.getWest() - d, Math.max(-85, b.getSouth() - d)], [b.getEast() + d, Math.min(85, b.getNorth() + d)]);
+const remplir = (t, [z, x, y]) => t.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+function majZones() {
+  const z = S.zones || [];
+  $('#btnZoneSuppr').hidden = !z.length;
+  if (z.length) $('#zoneInfo').textContent = `Gardé dans le téléphone : ${z.map(x => x.nom).join(', ')}. Cadre une autre zone pour l'ajouter.`;
+}
+$('#btnZone').onclick = async () => {
+  if (!plan) return;
+  const info = $('#zoneInfo'), btn = $('#btnZone');
+  if (!navigator.onLine) return info.textContent = 'Il faut du réseau pour télécharger la carte.';
+  // En 3D la vue va jusqu'à l'horizon : on prend la zone vue du dessus
+  const vue = { pitch: plan.getPitch(), bearing: plan.getBearing() };
+  plan.jumpTo({ pitch: 0, bearing: 0 }); const b = plan.getBounds(); plan.jumpTo(vue);
+  const vec = tuilesZone(b, 14);
+  if (vec.length > 8000) return info.textContent = `Zone trop grande (${vec.length} morceaux) : zoome sur ton massif ou ton département, puis réessaie.`;
+  btn.disabled = true; info.textContent = 'Préparation…';
+  try {
+    const [tj, style] = await Promise.all([fetch('https://tiles.openfreemap.org/planet').then(r => r.json()), fetch(STYLE).then(r => r.json())]);
+    const polices = ['Noto Sans Regular', 'Noto Sans Bold', 'Noto Sans Italic'].flatMap(f => ['0-255', '256-511', '8192-8447'].map(r => `https://tiles.openfreemap.org/fonts/${encodeURIComponent(f)}/${r}.pbf`));
+    const urls = [STYLE, 'https://tiles.openfreemap.org/planet', ...polices, ...['.json', '.png', '@2x.json', '@2x.png'].map(x => style.sprite + x),
+      ...vec.map(t => remplir(tj.tiles[0], t)),
+      // Relief avec une marge : en 3D on voit jusqu'à l'horizon et une altitude manquante est prise pour 0 m (« murs » à l'écran)
+      ...tuilesZone(marge(b, 1), 9).map(t => remplir(DEM, t)), ...tuilesZone(marge(b, .3), 10, 10).map(t => remplir(DEM, t)),
+      ...tuilesZone(marge(b, .1), 12, 11).map(t => remplir(DEM, t)),
+      ...tuilesZone(b, 6).map(t => remplir(style.sources.ne2_shaded.tiles[0], t))];
+    await navigator.storage?.persist?.(); // demande au téléphone de ne pas effacer ces cartes
+    const c = await caches.open(ZONES), file = [...urls];
+    let fait = 0, rate = 0;
+    await Promise.all(Array.from({ length: 6 }, async () => {
+      for (let u; (u = file.shift());) {
+        try {
+          const k = cleTuile(u);
+          if (!(await c.match(k))) { const r = await fetch(u, { cache: 'no-store' }); if (r.ok) await c.put(k, r); else if (r.status !== 404) rate++; }
+        } catch { rate++; }
+        if (++fait % 25 === 0) info.textContent = `Téléchargement de la carte… ${Math.round(fait / urls.length * 100)} %`;
+      }
+    }));
+    const ctr = b.getCenter(), v = COMMUNES.reduce((m, x) => { const d = distance([ctr.lat, ctr.lng], [x[1], x[2]]); return d < m[1] ? [x, d] : m; }, [null, Infinity])[0];
+    const nom = v ? 'autour de ' + v[0] : 'zone';
+    S.zones = [...(S.zones || []).filter(z => z.nom !== nom), { nom, t: Date.now() }]; save(); majZones();
+    const est = await navigator.storage?.estimate?.();
+    info.textContent += ` ✓ Zone prête hors ligne${est ? ` (${Math.round(est.usage / 1e6)} Mo utilisés par Repère)` : ''}${rate ? ` · ${rate} morceaux manquants, relance pour compléter` : ''}.`;
+  } catch (e) { info.textContent = 'Téléchargement interrompu : ' + e.message; }
+  btn.disabled = false;
+};
+$('#btnZoneSuppr').onclick = async () => {
+  if (!confirm('Effacer toutes les cartes téléchargées ? Il faudra du réseau pour les retrouver.')) return;
+  await caches.delete(ZONES); S.zones = []; save(); majZones();
+  $('#zoneInfo').textContent = 'Cartes effacées.';
+};
 
 // Recherche d'une commune dans la liste hors ligne
 const nomCommune = c => `${c[0]} (${c[4]})`;
@@ -451,7 +540,7 @@ $('#modes').onclick = e => { const b = e.target.closest('[data-mode]'); if (!b) 
 
 function choisirDest(ll, nom) {
   destination = { ll: ll.map(x => +x.toFixed(5)), nom };
-  if (plan) { destMk?.remove(); destMk = L.marker(ll, { icon: L.divIcon({ className: 'plan-dest', html: '', iconSize: [26, 34], iconAnchor: [13, 34] }) }).addTo(plan); }
+  if (plan) { destMk?.remove(); destMk = marqueurDest(ll); }
   calculerIti();
 }
 
@@ -494,10 +583,10 @@ function dessinerRoute(R, cadrer) {
   $('#itiRes').innerHTML = `<b>${esc(R.dest.nom)}</b> · ${fmtDist(R.d)} · ${duree(R.t * 1000)} ${MODES[R.mode][1]}`;
   $('#etapes').innerHTML = R.etapes.map(([t, d]) => `<li><span>${esc(t)}</span>${d ? `<small>${fmtDist(d)}</small>` : ''}</li>`).join('');
   $('#btnItiBoussole').hidden = false;
-  if (!plan) return;
-  routeLy?.remove(); routeLy = L.polyline(R.geo, { color: '#007AFF', weight: 6, opacity: .85 }).addTo(plan);
-  destMk?.remove(); destMk = L.marker(R.dest.ll, { icon: L.divIcon({ className: 'plan-dest', html: '', iconSize: [26, 34], iconAnchor: [13, 34] }) }).addTo(plan);
-  if (cadrer) { suivre = false; plan.fitBounds(routeLy.getBounds(), { padding: [30, 30] }); }
+  if (!plan?.getSource('route')) return; // la carte n'est pas prête : elle dessinera S.route en se chargeant
+  plan.getSource('route').setData(geoRoute(R));
+  destMk?.remove(); destMk = marqueurDest(R.dest.ll);
+  if (cadrer) { suivre = false; const b = new maplibregl.LngLatBounds(); R.geo.forEach(p => b.extend(lnglat(p))); plan.fitBounds(b, { padding: 40 }); }
 }
 // Sans réseau : la destination devient un point suivi par la flèche de la boussole
 $('#btnItiBoussole').onclick = () => {
@@ -631,23 +720,46 @@ majSmsProches();
 
 // ---------- Guide ----------
 let catSel = null;
-$('#cats').innerHTML = `<button class="chip on" data-cat="">Tout</button>` + Object.entries(CATS).map(([k, v]) => `<button class="chip" data-cat="${k}">${v}</button>`).join('');
+$('#cats').innerHTML = `<button class="chip on" data-cat="">Tout</button>` + Object.entries(CATS).map(([k, v]) => `<button class="chip" data-cat="${k}">${v}</button>`).join('')
+  + '<button class="chip" data-cat="wiki">Wikipédia</button>';
 $('#cats').onclick = e => { const c = e.target.closest('.chip'); if (!c) return; catSel = c.dataset.cat || null; $$('#cats .chip').forEach(x => x.classList.toggle('on', x === c)); majFiches(); };
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const texte = f => norm(f.titre + ' ' + f.mots + ' ' + f.corps.replace(/<[^>]+>/g, ' '));
+const VIDES = new Set('les des une est suis pour dans avec que qui quoi comment faire fait mon mes ton tes son ses sur pas plus tres trop elle ils nous vous mais car donc etre avoir quand'.split(' '));
+const motsCle = q => norm(q).split(/[^a-z0-9]+/).filter(m => m.length > 2 && !VIDES.has(m)).map(m => m.slice(0, Math.max(4, m.length - 2)));
 function chercher(q) {
-  const VIDES = new Set('les des une est suis pour dans avec que qui quoi comment faire fait mon mes ton tes son ses sur pas plus tres trop elle ils nous vous mais car donc etre avoir quand'.split(' '));
-  const mots = norm(q).split(/[^a-z0-9]+/).filter(m => m.length > 2 && !VIDES.has(m)).map(m => m.slice(0, Math.max(4, m.length - 2)));
+  const mots = motsCle(q);
   return FICHES.map(f => { const t = texte(f), tm = norm(f.titre + ' ' + f.mots); return { f, s: mots.reduce((a, m) => a + (tm.includes(m) ? 3 : 0) + (t.includes(m) ? 1 : 0), 0) }; })
     .filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.f);
 }
+
+// Wikipédia hors ligne : ~300 articles utiles en survie (data/wiki.json, fabriqué par wiki.mjs), gardés dans le téléphone
+let WIKI = [];
+fetch('data/wiki.json').then(r => r.json()).then(d => { WIKI = d.articles.map(a => ({ ...a, n: norm(a.t), nx: norm(a.x) })); majFiches(); }).catch(() => {});
+function chercherWiki(q, n = 6) {
+  const mots = motsCle(q); if (!mots.length) return [];
+  // ponytail: le titre compte beaucoup plus que le texte, sinon les longs articles gagnent toujours
+  return WIKI.map(a => ({ a, s: mots.reduce((s, m) => s + (a.n.includes(m) ? 6 : 0) + (a.nx.includes(m) ? 1 : 0), 0) }))
+    .filter(x => x.s > 1).sort((x, y) => y.s - x.s).slice(0, n).map(x => x.a);
+}
+const ligneWiki = a => `<li data-wiki="${esc(a.t)}"><span><small>Wikipédia · ${esc(a.th)}</small><b>${esc(a.t)}</b></span></li>`;
+function ouvrirWiki(t) {
+  const a = WIKI.find(x => x.t === t); if (!a) return;
+  const corps = esc(a.x).replace(/^(=+.*=+)$/gm, '\n\n$1\n\n').split(/\n{2,}/).filter(p => p.trim()).map(p => { const h = p.match(/^=+\s*(.+?)\s*=+$/); return h ? `<h3>${h[1]}</h3>` : `<p>${p.replace(/\n/g, '<br>')}</p>`; }).join('');
+  popup(`<div class="k">Wikipédia · ${esc(a.th)}</div><h2>${esc(a.t)}</h2><div class="wiki">${corps}</div>
+    <p class="credits">Article « ${esc(a.t)} » de Wikipédia en français, licence CC BY-SA 4.0, auteurs : voir l'historique de l'article. Texte seul, raccourci. Ne remplace pas un avis médical.</p>`);
+}
+
 function majFiches() {
   const q = $('#question').value.trim();
+  if (!q && catSel === 'wiki') return $('#fiches').innerHTML = WIKI.length ? WIKI.map(ligneWiki).join('') : '<li class="meta">Wikipédia hors ligne en cours de chargement…</li>';
   const liste = q ? chercher(q) : FICHES.filter(f => !catSel || f.cat === catSel);
-  $('#fiches').innerHTML = liste.map(f => `<li data-fiche="${f.id}"><span><small>${CATS[f.cat]}</small><b>${f.titre}</b></span></li>`).join('') || '<li class="meta">Aucune fiche. Essaie avec d\'autres mots.</li>';
+  const wiki = q ? chercherWiki(q) : [];
+  $('#fiches').innerHTML = (liste.map(f => `<li data-fiche="${f.id}"><span><small>${CATS[f.cat]}</small><b>${f.titre}</b></span></li>`).join('') || (wiki.length ? '' : '<li class="meta">Aucune fiche. Essaie avec d\'autres mots.</li>'))
+    + wiki.map(ligneWiki).join('');
 }
 $('#question').oninput = majFiches;
-$('#fiches').onclick = e => { const li = e.target.closest('[data-fiche]'); if (li) ouvrirFiche(li.dataset.fiche); };
+$('#fiches').onclick = e => { const li = e.target.closest('[data-fiche],[data-wiki]'); if (!li) return; li.dataset.fiche ? ouvrirFiche(li.dataset.fiche) : ouvrirWiki(li.dataset.wiki); };
 function ouvrirFiche(id) {
   const f = FICHES.find(x => x.id === id);
   popup(`<div class="k">${CATS[f.cat]}</div><h2>${f.titre}</h2>${f.corps}${outil(f.outil)}`);
@@ -682,15 +794,36 @@ majFiches();
 // wllama = llama.cpp dans le navigateur : carte graphique (WebGPU) si le navigateur la donne, sinon le processeur.
 // Marche donc sur tous les iPhone. Le modèle est téléchargé une fois depuis Hugging Face puis gardé dans le téléphone.
 const MOBILE = /iPhone|iPad|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent));
-// ponytail: petit modèle sur téléphone (rapide sur le processeur, peu de mémoire), plus gros sur ordinateur (meilleures réponses)
+// Deux IA au choix : la rapide par défaut sur téléphone, la plus intelligente par défaut sur ordinateur
 const HF = 'https://huggingface.co/Qwen/';
-const MODELE = MOBILE ? HF + 'Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf'
-  : HF + 'Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf';
-const TAILLE_IA = MOBILE ? '490 Mo' : '1,1 Go';
-let moteur = null, iaEnCours = null;
-const iaInstallee = () => S.ia === MODELE;
+const MODELES = {
+  rapide: [HF + 'Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf', '490 Mo'],
+  precis: [HF + 'Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf', '1,1 Go'],
+};
+let choixIA = MODELES[S.modele] ? S.modele : MOBILE ? 'rapide' : 'precis';
+let moteur = null, iaEnCours = null, wllamaCls = null;
+const MODELE = () => MODELES[choixIA][0];
+const iaInstallee = () => S.ia === MODELE();
 function iaEtat(t) { $('#iaEtat').textContent = t; }
-if (iaInstallee()) { $('#btnIA').textContent = 'Démarrer'; iaEtat('Installée · appuie pour la démarrer'); }
+function majIA() {
+  $$('#iaModeles .chip').forEach(c => c.classList.toggle('on', c.dataset.m === choixIA));
+  if (moteur) return;
+  $('#btnIA').hidden = false; $('#btnIA').textContent = iaInstallee() ? 'Démarrer' : 'Installer';
+  iaEtat(iaInstallee() ? 'Installée · appuie pour la démarrer' : `Répond à partir du guide, sans internet · ${MODELES[choixIA][1]} à télécharger une fois`);
+}
+majIA();
+const nouvelleIA = async () => new (wllamaCls ??= (await import('./vendor/wllama.js')).Wllama)(
+  { 'single-thread/wllama.wasm': new URL('vendor/wllama.wasm', location.href).href },
+  { allowOffline: true, suppressNativeLog: true, logger: { debug() {}, log() {}, warn: console.warn, error: console.error } });
+$('#iaModeles').onclick = async e => {
+  const m = e.target.closest('[data-m]')?.dataset.m;
+  if (!m || m === choixIA || iaEnCours || iaOccupee) return;
+  const ancien = S.ia;
+  if (ancien && !confirm(`Changer d'IA ? L'actuelle sera effacée du téléphone pour libérer la place, la nouvelle (${MODELES[m][1]}) sera à télécharger.`)) return;
+  choixIA = S.modele = m; save();
+  if (ancien) { try { await (moteur || await nouvelleIA()).cacheManager.delete(ancien); } catch (err) { console.warn(err); } }
+  await moteur?.exit?.(); moteur = null; S.ia = false; save(); majIA();
+};
 
 function chargerIA() { return iaEnCours ??= demarrerIA().finally(() => { iaEnCours = null; }); }
 async function demarrerIA() {
@@ -698,11 +831,9 @@ async function demarrerIA() {
   const prog = $('#iaProg'); prog.hidden = false; $('#btnIA').disabled = true;
   iaEtat(iaInstallee() ? 'Démarrage…' : 'Préparation…');
   try {
-    const { Wllama } = await import('./vendor/wllama.js');
     // wllama 2.3.7 : dernière version en mémoire 32 bits (Safari sur iPhone ne gère pas la mémoire 64 bits des versions suivantes)
-    const w = new Wllama({ 'single-thread/wllama.wasm': new URL('vendor/wllama.wasm', location.href).href },
-      { allowOffline: true, suppressNativeLog: true, logger: { debug() {}, log() {}, warn: console.warn, error: console.error } });
-    await w.loadModelFromUrl(MODELE, {
+    const w = await nouvelleIA();
+    await w.loadModelFromUrl(MODELE(), {
       n_ctx: 2048, n_threads: 1,
       progressCallback: ({ loaded, total }) => {
         const p = total ? Math.round(loaded / total * 100) : 0;
@@ -710,7 +841,7 @@ async function demarrerIA() {
         iaEtat(p < 100 ? `Téléchargement… ${p} %` : 'Démarrage…');
       },
     });
-    moteur = w; S.ia = MODELE; save();
+    moteur = w; S.ia = MODELE(); save();
     iaEtat('Prête · fonctionne sans internet'); $('#btnIA').hidden = true; prog.hidden = true;
     return moteur;
   } catch (e) {
@@ -720,7 +851,7 @@ async function demarrerIA() {
   }
 }
 $('#btnIA').onclick = () => {
-  if (!iaInstallee() && !confirm(`Télécharger l'assistant IA (environ ${TAILLE_IA}) ? Fais-le en Wi-Fi, avant de partir.`)) return;
+  if (!iaInstallee() && !confirm(`Télécharger l'assistant IA (environ ${MODELES[choixIA][1]}) ? Fais-le en Wi-Fi, avant de partir.`)) return;
   chargerIA();
 };
 
@@ -736,17 +867,18 @@ function contexteSituation() {
 
 $('#btnDemander').onclick = async () => {
   const q = $('#question').value.trim(); if (!q) return $('#question').focus();
-  const sources = chercher(q).slice(0, 3), rep = $('#reponse');
+  const sources = chercher(q).slice(0, 3), wiki = chercherWiki(q, 2), rep = $('#reponse');
   rep.hidden = false;
-  const liens = `<div class="src">${sources.map(f => `<button class="chip" data-ouvre="${f.id}">${f.titre}</button>`).join('')}</div>`;
+  const liens = `<div class="src">${sources.map(f => `<button class="chip" data-ouvre="${f.id}">${f.titre}</button>`).join('')}${wiki.map(a => `<button class="chip" data-wiki="${esc(a.t)}">Wikipédia : ${esc(a.t)}</button>`).join('')}</div>`;
   if (!moteur) {
     if (iaInstallee()) { rep.textContent = 'Démarrage de l\'IA…'; await chargerIA(); }
-    if (!moteur) { rep.innerHTML = (sources.length ? '<b>Fiches qui répondent à ta question :</b>' : 'Aucune fiche ne correspond. Essaie avec d\'autres mots.') + liens; return; }
+    if (!moteur) { rep.innerHTML = (sources.length || wiki.length ? '<b>Ce qui répond à ta question :</b>' : 'Rien ne correspond. Essaie avec d\'autres mots.') + liens; return; }
   }
   if (iaOccupee) return;
-  // ponytail: une seule fiche coupée à 900 caractères : sur le processeur d'un téléphone, chaque mot lu coûte du temps
-  const f = sources[0];
-  const base = f ? `${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 900)}` : '(aucune fiche)';
+  // ponytail: une seule source coupée à 900 caractères (la fiche, sinon l'article Wikipédia) : sur le processeur d'un téléphone, chaque mot lu coûte du temps
+  const f = sources[0], w = wiki[0];
+  const base = f ? `${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 900)}`
+    : w ? `${w.t}\n${w.x.replace(/^=+.*=+$/gm, '').replace(/\n+/g, '\n').slice(0, 900)}` : '(aucune fiche)';
   // ponytail: prompt Qwen (ChatML) écrit à la main et réponse amorcée par « 1. » : sans ça le petit modèle (0,5B)
   // recopie les consignes ou pose des questions au lieu de donner les gestes
   const prompt = `<|im_start|>system\nTu es un guide de survie. Tu donnes les gestes à faire, en français, en 3 à 5 étapes numérotées, d'après la fiche.<|im_end|>\n<|im_start|>user\nFiche :\n${base}\n\n${contexteSituation()}\n\nQuestion : ${q}<|im_end|>\n<|im_start|>assistant\n1.`;
@@ -763,7 +895,7 @@ $('#btnDemander').onclick = async () => {
 };
 let iaOccupee = false;
 $('#question').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnDemander').click(); });
-$('#reponse').onclick = e => { const b = e.target.closest('[data-ouvre]'); if (b) ouvrirFiche(b.dataset.ouvre); };
+$('#reponse').onclick = e => { const b = e.target.closest('[data-ouvre],[data-wiki]'); if (!b) return; b.dataset.ouvre ? ouvrirFiche(b.dataset.ouvre) : ouvrirWiki(b.dataset.wiki); };
 
 // ---------- Bivouac ----------
 const DANGERS = [

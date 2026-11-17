@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Repère">
-<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -122,9 +122,16 @@
   <div class="plan-wrap">
     <div id="plan"></div>
     <div class="plan-btns">
-      <button id="btnFond" class="plan-btn" aria-label="Changer de fond">Relief</button>
+      <button id="btn3D" class="plan-btn" aria-label="Vue en 3D">3D</button>
+      <button id="btnRelief" class="plan-btn" aria-label="Ombrage du relief">Relief</button>
       <button id="btnCentrer" class="plan-btn" aria-label="Me recentrer"><svg><use href="#i-pos"/></svg></button>
     </div>
+  </div>
+  <div class="carte">
+    <div class="k">Carte hors ligne</div>
+    <p class="meta" id="zoneInfo">Cadre la zone de ta sortie sur la carte, puis télécharge-la : elle restera lisible sans réseau, en 2D comme en 3D.</p>
+    <button class="btn large primaire" id="btnZone" style="margin-top:10px">Télécharger la zone affichée</button>
+    <button class="btn petit" id="btnZoneSuppr" hidden style="margin-top:10px">Effacer les cartes téléchargées</button>
   </div>
   <div class="carte">
     <div class="k">Aller à</div>
@@ -135,7 +142,7 @@
     <button class="btn large" id="btnItiBoussole" hidden style="margin-top:12px">Suivre à la boussole (sans réseau)</button>
     <ol class="etapes" id="etapes"></ol>
   </div>
-  <p class="credits">Cartes © contributeurs OpenStreetMap · relief OpenTopoMap (CC BY-SA) · itinéraires FOSSGIS / OSRM</p>
+  <p class="credits">Cartes © OpenFreeMap, OpenMapTiles, contributeurs OpenStreetMap · relief © Mapzen, AWS Terrain Tiles · itinéraires FOSSGIS / OSRM</p>
 </section>
 
 <section id="v-boussole" class="vue">
@@ -222,6 +229,7 @@
   <div class="carte ia" id="iaCarte">
     <div class="row"><div><b>Assistant IA hors ligne</b><div class="meta" id="iaEtat">Répond à partir du guide, sans internet</div></div>
     <button class="btn petit" id="btnIA">Installer</button></div>
+    <div class="chips" id="iaModeles" style="margin-top:10px"><button class="chip" data-m="rapide">Rapide · 490 Mo</button><button class="chip" data-m="precis">Plus intelligente · 1,1 Go</button></div>
     <div class="progress" id="iaProg" hidden><div></div></div>
   </div>
   <div id="reponse" class="carte reponse" hidden></div>
@@ -286,7 +294,7 @@
 <div id="lum" class="lum" hidden><video id="lumVideo" playsinline muted autoplay hidden></video><div class="lum-txt" id="lumTxt"></div><div class="lum-info" id="lumInfo"></div><button id="lumStop">Appuie pour arrêter</button></div>
 <dialog id="modal"><div id="modalBody"></div><button class="btn" id="modalFermer">Fermer</button></dialog>
 
-<script src="vendor/leaflet.js"></script>
+<script src="vendor/maplibre-gl.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

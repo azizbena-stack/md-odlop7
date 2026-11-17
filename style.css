@@ -339,11 +339,16 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 .plan-btn { border: 0; min-width: 44px; height: 44px; padding: 0 12px; border-radius: 14px; font-weight: 600; font-size: 14px; color: var(--accent); cursor: pointer;
   background: var(--barre); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 4px 14px rgba(0, 0, 0, .15); display: grid; place-items: center; }
 .plan-btn svg { width: 22px; height: 22px; }
-.leaflet-container { font-family: var(--font); }
-.leaflet-control-attribution { font-size: 10px; background: rgba(255, 255, 255, .75) !important; }
-.leaflet-popup-content-wrapper { border-radius: 14px; }
-.plan-pt { font-size: 18px; line-height: 26px; text-align: center; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5)); }
-.plan-dest { background: #FF3B30; border: 3px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 4px 10px rgba(0, 0, 0, .3); width: 26px !important; height: 26px !important; }
+.plan-btn.on { background: var(--accent); color: #fff; }
+.wiki h3 { font-size: 17px; margin: 18px 0 6px; }
+.wiki p { margin: 0 0 10px; line-height: 1.5; }
+.maplibregl-map { font-family: var(--font); }
+.maplibregl-popup-content { border-radius: 14px; color: #000; }
+.plan-pt { width: 26px; height: 26px; font-size: 18px; line-height: 26px; text-align: center; cursor: pointer; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5)); }
+.plan-moi, .plan-mien { width: 16px; height: 16px; border-radius: 50%; background: #007AFF; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
+.plan-mien { width: 12px; height: 12px; background: #34C759; cursor: pointer; }
+.plan-cible { width: 26px; height: 36px; }
+.plan-dest { width: 26px; height: 26px; background: #FF3B30; border: 3px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 4px 10px rgba(0, 0, 0, .3); }
 .etapes { list-style: none; padding: 0; margin: 12px 0 0; counter-reset: e; }
 .etapes li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: .5px solid var(--ligne); font-size: 15px; counter-increment: e; }
 .etapes li span::before { content: counter(e) '. '; color: var(--txt2); }
