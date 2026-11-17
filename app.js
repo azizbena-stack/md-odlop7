@@ -30,6 +30,7 @@ addEventListener('online', majReseau); addEventListener('offline', majReseau); m
 // ---------- Navigation ----------
 function ouvrir(vue) {
   if (vue !== 'carte') { $('.plan-wrap')?.classList.remove('plein'); $('#btnPlein') && ($('#btnPlein').textContent = '⤢'); }
+  else if (guidage) { $('.plan-wrap').classList.add('plein'); setTimeout(() => { plan?.resize(); majGestes(); }); } // guidage en cours : on revient en plein écran
   $$('.vue').forEach(v => v.classList.toggle('active', v.id === 'v-' + vue));
   $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.vue === vue || (b.dataset.vue === 'carte' && vue === 'boussole')));
   $$('[data-seg]').forEach(b => b.classList.toggle('on', b.dataset.seg === vue));
@@ -420,7 +421,9 @@ function initPlan() {
   if (!window.maplibregl) return $('#itiRes').textContent = 'La carte n\'a pas pu se charger.';
   if (plan) return plan.resize();
   try {
-    plan = new maplibregl.Map({ container: 'plan', style: STYLE, center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 60, attributionControl: { compact: true } }); // 60° au plus : au-delà on voit le ciel en haut de l’écran (Aziz veut la carte sur tout l’écran)
+    plan = new maplibregl.Map({ container: 'plan', style: STYLE, center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 60, attributionControl: { compact: true },
+      // Carte dans la page : un doigt fait défiler la page, deux doigts bougent la carte (en plein écran : un doigt suffit)
+      cooperativeGestures: true, locale: { 'CooperativeGesturesHandler.MobileHelpText': 'Deux doigts pour bouger la carte · un doigt pour faire défiler', 'CooperativeGesturesHandler.WindowsHelpText': 'Ctrl + molette pour zoomer', 'CooperativeGesturesHandler.MacHelpText': '⌘ + molette pour zoomer' } }); // 60° au plus : au-delà on voit le ciel en haut de l’écran (Aziz veut la carte sur tout l’écran)
   } catch {
     // Vu le 17/11 : Chrome met sur liste noire les cartes graphiques des vieux Mac (Iris Pro, GT 750M) ; Safari, lui, affiche la carte
     $('.plan-btns').hidden = true;
@@ -469,8 +472,10 @@ function initPlan() {
 $('#btnPlein').onclick = () => {
   const on = $('.plan-wrap').classList.toggle('plein');
   $('#btnPlein').textContent = on ? '✕' : '⤢'; $('#btnPlein').setAttribute('aria-label', on ? 'Quitter le plein écran' : 'Carte en plein écran');
-  plan?.resize();
+  plan?.resize(); majGestes();
 };
+const majGestes = () => plan?.cooperativeGestures[$('.plan-wrap').classList.contains('plein') ? 'disable' : 'enable']();
+$('#planSuite').onclick = () => $('#planSuite').nextElementSibling.scrollIntoView({ behavior: 'smooth', block: 'start' });
 // 2D = vue du dessus (à vol d'oiseau) ; 3D = carte inclinée avec le relief en volume et les bâtiments
 function vue3D(on) {
   en3D = on; $('#btn3D').textContent = on ? '2D' : '3D'; $('#btn3D').classList.toggle('on', on);
@@ -505,12 +510,12 @@ function demarrerGuidage() {
   const el = document.createElement('div'); el.className = 'plan-nav';
   el.innerHTML = '<svg viewBox="0 0 40 40"><path d="M20 3 L35 35 L20 27 L5 35Z"/></svg>';
   navMk = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(lnglat(ici())).addTo(plan);
-  $('#navBandeau').hidden = false; $('#itiChoix').hidden = true;
+  $('#navBandeau').hidden = false; $('#itiChoix').hidden = true; $('#btnPlein').hidden = true; // pendant le guidage : toujours plein écran, on arrête avec la croix du bandeau vert
   if (!$('.plan-wrap').classList.contains('plein')) $('#btnPlein').click(); // plein écran, comme un GPS de voiture
   dessinerRoute(S.route, false); majGuidage();
 }
 function arreterGuidage(msg) {
-  guidage = false; navMk?.remove(); navMk = null; $('#navBandeau').hidden = true; if (S.route) dessinerRoute(S.route, false);
+  guidage = false; navMk?.remove(); navMk = null; $('#navBandeau').hidden = true; $('#btnPlein').hidden = false; if (S.route) dessinerRoute(S.route, false);
   if ($('.plan-wrap').classList.contains('plein')) $('#btnPlein').click();
   plan?.easeTo({ pitch: en3D ? 60 : 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 } });
   majMoiPlan(); if (msg) $('#itiRes').textContent = msg;
@@ -1051,48 +1056,71 @@ function contexteSituation() {
   return c.join(' ');
 }
 
+// Discussion : chaque question s'ajoute sous les précédentes, l'IA garde en tête les 2 derniers échanges
+let fil = Array.isArray(S.fil) ? S.fil : [];
+const bulleIA = (x, enCours) => `<div class="bulle ia">${enCours ? `<div id="iaTexte" class="meta">${x.attente}</div>` : x.r ? `<div class="txt">${esc(x.r)}</div>` : ''}${x.extra || ''}</div>`;
+function afficherFil(enCours) {
+  $('#reponse').hidden = !fil.length; $('#filVider').hidden = !fil.length;
+  $('#reponse').innerHTML = fil.map((x, i) => `<div class="bulle moi">${esc(x.q)}</div>${bulleIA(x, enCours && i === fil.length - 1)}`).join('');
+}
+const garderFil = () => { S.fil = fil.slice(-10).map(({ q, r, extra }) => ({ q, r, extra })); save(); };
+afficherFil();
+$('#filVider').onclick = () => { fil = []; garderFil(); afficherFil(); $('#question').focus(); };
+
 $('#btnDemander').onclick = async () => {
   const q = $('#question').value.trim(); if (!q) return $('#question').focus();
-  const sources = chercher(q).slice(0, 3), wiki = chercherWiki(q, 2), rep = $('#reponse');
-  rep.hidden = false;
-  const liens = `<div class="src">${sources.map(f => `<button class="chip" data-ouvre="${f.id}">${f.titre}</button>`).join('')}${wiki.map(a => `<button class="chip" data-wiki="${esc(a.t)}">Wikipédia : ${esc(a.t)}</button>`).join('')}</div>`;
+  if (iaOccupee) return;
+  $('#question').value = ''; $('#question').blur();
+  // Question de suite (« et sans citron ? ») : on cherche aussi avec la question d'avant
+  const prec = fil[fil.length - 1], qCherche = prec && motsCle(q).length < 3 ? prec.q + ' ' + q : q;
+  const sources = chercher(qCherche).slice(0, 3), wiki = chercherWiki(qCherche, 2);
+  const liens = sources.length || wiki.length ? `<div class="src">${sources.map(f => `<button class="chip" data-ouvre="${f.id}">${f.titre}</button>`).join('')}${wiki.map(a => `<button class="chip" data-wiki="${esc(a.t)}">Wikipédia : ${esc(a.t)}</button>`).join('')}</div>` : '';
   // Solution immédiate : les gestes de la fiche la plus liée, sans attendre l'IA
-  const mots = motsCle(q), titreLie = t => mots.length && mots.filter(m => contient(norm(t), m)).length > mots.length / 2;
+  const mots = motsCle(qCherche), titreLie = t => mots.length && mots.filter(m => contient(norm(t), m)).length > mots.length / 2;
   const f = sources.find(x => titreLie(x.titre + ' ' + x.mots)), w = wiki.find(a => titreLie(a.t));
   const gestes = f ? (f.corps.match(/<(ol|ul)>[\s\S]*?<\/\1>/) || [''])[0] : '';
   const rapide = gestes ? `<div class="fiche-rapide"><div class="k">${f.titre} · à faire tout de suite</div>${gestes}</div>` : '';
+  const x = { q, r: '', extra: rapide + liens, attente: 'Démarrage de l\'IA…' };
+  fil.push(x); afficherFil(true);
+  const montrer = () => $('#reponse').lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  montrer();
+  if (!moteur && iaInstallee()) await chargerIA();
   if (!moteur) {
-    if (iaInstallee()) { rep.innerHTML = `<div class="meta">Démarrage de l'IA…</div>${rapide}${liens}`; await chargerIA(); }
-    if (!moteur) { rep.innerHTML = (rapide || (sources.length || wiki.length ? '<b>Ce qui répond à ta question :</b>' : 'Rien ne correspond. Essaie avec d\'autres mots.')) + liens; return; }
+    x.r = rapide || liens ? '' : 'Rien ne correspond. Essaie avec d\'autres mots, ou installe l\'assistant IA ci-dessous.';
+    if (!rapide && liens) x.extra = '<b>Ce qui répond à ta question :</b>' + liens;
+    garderFil(); afficherFil(); return;
   }
-  if (iaOccupee) return;
   // ponytail: une seule source coupée à 600 caractères (la fiche, sinon l'article Wikipédia) : sur le processeur d'un téléphone, chaque mot lu coûte du temps
   // L'IA ne reçoit que la source vraiment liée (f ou w ci-dessus) : une fiche hors sujet l'égare et la ralentit
   const base = f ? `${f.titre}\n${f.corps.replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').replace(/\n+/g, '\n').slice(0, 600)}`
     : w ? `${w.t}\n${w.x.replace(/^=+.*=+$/gm, '').replace(/\n+/g, '\n').slice(0, 600)}` : '';
+  // Les 2 échanges précédents, raccourcis : l'IA comprend « et si… », « pourquoi ? »
+  const hist = fil.slice(-3, -1).filter(e => e.r).map(e => `<|im_start|>user\n${e.q}<|im_end|>\n<|im_start|>assistant\n${e.r.slice(0, 300)}<|im_end|>\n`).join('');
   // ponytail: prompt Qwen (ChatML) écrit à la main. Avec une fiche, réponse amorcée par « 1. » : sans ça le petit modèle (0,5B)
   // recopie les consignes ou pose des questions au lieu de donner les gestes. Sans fiche : réponse courte de lui-même.
   const amorce = base ? '1.' : '';
   const prompt = base
-    ? `<|im_start|>system\nTu es un guide de survie. Tu donnes les gestes à faire, en français, en 3 à 5 étapes numérotées, d'après la fiche.<|im_end|>\n<|im_start|>user\nFiche :\n${base}\n\n${contexteSituation()}\n\nQuestion : ${q}<|im_end|>\n<|im_start|>assistant\n1.`
-    : `<|im_start|>system\nTu es un guide de survie. Réponds en français, en 2 ou 3 phrases courtes et concrètes.<|im_end|>\n<|im_start|>user\n${q}<|im_end|>\n<|im_start|>assistant\n`;
-  // Les fiches s'affichent tout de suite, la réponse de l'IA s'écrit au-dessus au fur et à mesure.
+    ? `<|im_start|>system\nTu es un guide de survie. Tu donnes les gestes à faire, en français, en 3 à 5 étapes numérotées, d'après la fiche.<|im_end|>\n${hist}<|im_start|>user\nFiche :\n${base}\n\n${contexteSituation()}\n\nQuestion : ${q}<|im_end|>\n<|im_start|>assistant\n1.`
+    : `<|im_start|>system\nTu es un guide de survie. Réponds en français, en 2 ou 3 phrases courtes, concrètes et exactes. Si tu ne sais pas, dis-le.<|im_end|>\n${hist}<|im_start|>user\n${q}<|im_end|>\n<|im_start|>assistant\n`;
   // Avant le premier mot, l'IA lit (sur le processeur, ça peut prendre une minute) : un compteur montre qu'elle travaille.
-  rep.innerHTML = `<div id="iaTexte" class="meta">${base ? 'Repère lit la fiche' : 'Repère réfléchit'}…</div>${rapide}${liens}`;
+  x.attente = `${base ? 'Repère lit la fiche' : 'Repère réfléchit'}…`; afficherFil(true);
   iaOccupee = true; $('#btnDemander').disabled = true;
   const t0 = Date.now(), chrono = setInterval(() => {
     const el = $('#iaTexte'), s = Math.round((Date.now() - t0) / 1000);
-    if (el?.classList.contains('meta')) el.textContent = `${base ? 'Repère lit la fiche' : 'Repère réfléchit'}… ${s} s${s > 10 ? ' · sans internet, l\'IA travaille sur le processeur : patiente' : ''}`;
+    if (el?.classList.contains('meta')) el.textContent = `${x.attente} ${s} s${s > 10 ? ' · sans internet, l\'IA travaille sur le processeur : patiente' : ''}`;
   }, 1000);
   try {
     await moteur.createCompletion(prompt, {
-      nPredict: base ? 200 : 120, // assez pour 5 étapes : au-delà le petit modèle brode sampling: { temp: .3, top_p: .9, penalty_repeat: 1.1 },
-      onNewToken: (t, p, texte) => { const el = $('#iaTexte'); if (el) { el.className = ''; el.style.whiteSpace = 'pre-line'; el.textContent = (amorce + texte).replace(/\*\*/g, ''); } },
+      nPredict: base ? 200 : 120, // assez pour 5 étapes : au-delà le petit modèle brode
+      sampling: { temp: .3, top_p: .9, penalty_repeat: 1.1 }, // peu d'invention (ce réglage était resté coincé dans le commentaire au-dessus)
+      useCache: true, // reprend ce que l'IA a déjà lu (consigne, échanges précédents) : les questions de suite démarrent plus vite
+      onNewToken: (t, p, texte) => { x.r = (amorce + texte).replace(/\*\*/g, '').trim(); const el = $('#iaTexte'); if (el) { el.className = ''; el.textContent = x.r; } },
     });
-  } catch (e) { $('#iaTexte').textContent = 'Erreur de l\'IA : ' + (e.message || e); }
+  } catch (e) { x.r = 'Erreur de l\'IA : ' + (e.message || e); }
   clearInterval(chrono);
-  if ($('#iaTexte')?.classList.contains('meta')) $('#iaTexte').textContent = 'L\'IA n\'a rien répondu. Reformule ta question, ou ouvre les fiches ci-dessous.';
+  if (!x.r) x.r = 'L\'IA n\'a rien répondu. Reformule ta question, ou ouvre les fiches ci-dessous.';
   iaOccupee = false; $('#btnDemander').disabled = false;
+  garderFil(); afficherFil(); montrer();
 };
 let iaOccupee = false;
 $('#question').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnDemander').click(); });

@@ -139,6 +139,7 @@
       </div>
     </div>
   </div>
+  <button class="plan-suite" id="planSuite"><span>⌄</span> Chercher un lieu · télécharger la carte</button>
   <div class="carte">
     <div class="k">Carte hors ligne</div>
     <p class="meta" id="zoneInfo">Cadre la zone de ta sortie sur la carte, puis télécharge-la : elle restera lisible sans réseau, en 2D comme en 3D.</p>
@@ -146,7 +147,7 @@
     <button class="btn large" id="btnFrance" style="margin-top:10px">Toute la France · détail moyen · ~300 Mo</button>
     <button class="btn petit" id="btnZoneSuppr" hidden style="margin-top:10px">Effacer les cartes téléchargées</button>
   </div>
-  <div class="carte">
+  <div class="carte" id="allerA">
     <div class="k">Aller à</div>
     <div class="ask"><input id="dest" class="loupe" type="search" list="destListe" placeholder="Ville, village… ou touche la carte" autocomplete="off"><button class="btn primaire" id="btnIti">Y aller</button></div>
     <datalist id="destListe"></datalist>
@@ -236,17 +237,18 @@
 <!-- GUIDE -->
 <section id="v-guide" class="vue">
   <h1 class="titre">Guide</h1>
+  <div id="reponse" class="reponse fil" hidden></div>
   <div class="ask">
-    <input id="question" type="search" placeholder="Pose ta question… ex : je me suis coupé" autocomplete="off">
+    <input id="question" type="search" enterkeyhint="send" placeholder="Pose ta question… ex : je me suis coupé" autocomplete="off">
     <button class="btn primaire" id="btnDemander">Demander</button>
   </div>
+  <button class="btn petit" id="filVider" hidden style="margin:-6px 0 14px">Nouvelle discussion</button>
   <div class="carte ia" id="iaCarte">
     <div class="row"><div><b>Assistant IA hors ligne</b><div class="meta" id="iaEtat">Répond à partir du guide, sans internet</div></div>
     <button class="btn petit" id="btnIA">Installer</button></div>
     <div class="chips" id="iaModeles" style="margin-top:10px"><button class="chip" data-m="rapide">Rapide · 490 Mo</button><button class="chip" data-m="precis">Plus intelligente · 1,1 Go</button></div>
     <div class="progress" id="iaProg" hidden><div></div></div>
   </div>
-  <div id="reponse" class="carte reponse" hidden></div>
   <div class="chips" id="cats"></div>
   <ul class="fiches" id="fiches"></ul>
 </section>
