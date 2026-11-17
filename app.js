@@ -410,7 +410,14 @@ function initPlan() {
   if (plan) return plan.resize();
   try {
     plan = new maplibregl.Map({ container: 'plan', style: STYLE, center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 75, attributionControl: { compact: true } });
-  } catch { return $('#plan').innerHTML = '<p class="meta" style="padding:20px">Ce navigateur ne peut pas afficher la carte (WebGL désactivé). La boussole et l\'itinéraire restent disponibles.</p>'; }
+  } catch {
+    // Vu le 17/11 : Chrome met sur liste noire les cartes graphiques des vieux Mac (Iris Pro, GT 750M) ; Safari, lui, affiche la carte
+    $('.plan-btns').hidden = true;
+    return $('#plan').innerHTML = `<div class="meta" style="padding:24px;line-height:1.5"><b style="color:var(--txt)">Ce navigateur refuse d'afficher la carte</b><br>
+      Il a coupé le WebGL, souvent sur les ordinateurs anciens. Ouvre Repère dans <b>Safari</b> ou sur ton téléphone : la carte s'y affiche.<br><br>
+      Dans Chrome, tu peux essayer : tape <code>chrome://flags/#ignore-gpu-blocklist</code> dans la barre d'adresse, choisis « Enabled », puis relance Chrome.<br><br>
+      La boussole et l'itinéraire restent disponibles ici.</div>`;
+  }
   plan.on('load', () => {
     const src = { type: 'raster-dem', tiles: [DEM], encoding: 'terrarium', tileSize: 256, maxzoom: 12 };
     plan.addSource('dem', { ...src, attribution: 'Relief © Mapzen, AWS Terrain Tiles' });
@@ -1043,9 +1050,9 @@ $('#btnFond').onclick = () => {
 // Thème nuit rouge
 const appliquerTheme = () => {
   document.documentElement.dataset.theme = S.theme; $('#btnRouge').setAttribute('aria-pressed', S.theme === 'rouge');
-  document.documentElement.classList.toggle('paysage', !!S.paysage); $('#btnPaysage')?.setAttribute('aria-pressed', !!S.paysage);
+  document.documentElement.classList.toggle('studio', !!S.studio); $('#btnStudio')?.setAttribute('aria-pressed', !!S.studio);
 };
-$('#btnPaysage') && ($('#btnPaysage').onclick = () => { S.paysage = !S.paysage; save(); appliquerTheme(); });
+$('#btnStudio') && ($('#btnStudio').onclick = () => { S.studio = !S.studio; save(); appliquerTheme(); });
 $('#btnRouge').onclick = () => { S.theme = S.theme === 'rouge' ? '' : 'rouge'; save(); appliquerTheme(); };
 appliquerTheme();
 

@@ -361,32 +361,42 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 #proches li[data-ll], #radar [data-ll] { cursor: pointer; }
 #proches li[data-ll]:active { opacity: .5; }
 
-/* ---------- Thème « Paysage » : illustration peinte, lever de soleil sur montagnes et forêt, cartes crème translucides ----------
-   (réglage dans Moi ; le mode survie et le mode nuit rouge passent devant). Décor : paysage.svg, dessiné pour Repère. */
-:root.paysage:not(.survie):not([data-theme="rouge"]) {
-  --bg: #F6E3D3; --bg2: rgba(63, 107, 96, .12); --surface: rgba(255, 249, 240, .80); --surface2: rgba(255, 249, 240, .9); --ligne: rgba(58, 42, 63, .12);
-  --txt: #33263A; --txt2: #6F5F73; --txt3: #A897A6;
-  --accent: #D9694A; --accent2: #3F6B60; --ambre: #E39B4C; --ok: #3F7D5F; --vert: #4F8F6B; --warn: #C2562F; --danger: #D63B2F;
-  --barre: rgba(255, 246, 236, .72); --verre-bord: rgba(255, 255, 255, .5);
-  --ombre: 0 10px 30px -12px rgba(51, 38, 58, .35); --r: 24px;
-  --serif: ui-serif, 'New York', 'Iowan Old Style', Georgia, serif;
-  color-scheme: light;
-}
-:root.paysage:not(.survie):not([data-theme="rouge"]) body { background: #F6E3D3; }
-:root.paysage:not(.survie):not([data-theme="rouge"]) body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: url(paysage.svg) center bottom / cover no-repeat; }
-:root.paysage:not(.survie):not([data-theme="rouge"]) :is(.titre, h2, .coach-msg) { font-family: var(--serif); font-weight: 600; letter-spacing: 0; }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .titre { color: #FFF8EC; font-size: 38px; text-shadow: 0 2px 14px rgba(51, 38, 58, .35); }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .k { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 16px; color: var(--accent2); }
-:root.paysage:not(.survie):not([data-theme="rouge"]) :is(.carte, #fiches li, .coach) { backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%); border: .5px solid rgba(255, 255, 255, .6); }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .plan-wrap { box-shadow: var(--ombre); border: .5px solid rgba(255, 255, 255, .6); }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .btn.primaire, :root.paysage:not(.survie):not([data-theme="rouge"]) .chip.on { background: var(--accent); color: #FFF8EC; }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .btn { border-radius: 99px; }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .btn.large { box-shadow: 0 8px 20px -10px rgba(217, 105, 74, .8); }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .segment button.on { background: rgba(255, 249, 240, .95); color: var(--accent2); }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .proches .pastille { background: rgba(63, 107, 96, .14); border-radius: 50%; }
-/* Barre d'onglets : vert profond de la forêt, icônes crème */
-:root.paysage:not(.survie):not([data-theme="rouge"]) .tabs { background: rgba(34, 65, 59, .82); border-color: rgba(255, 255, 255, .12); box-shadow: 0 14px 34px -10px rgba(20, 30, 28, .6); }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .tabs button { color: rgba(255, 248, 236, .75); }
-:root.paysage:not(.survie):not([data-theme="rouge"]) .tabs button.active { color: #FFF8EC; background: rgba(255, 248, 236, .16); }
 #btnPlein { font-size: 22px; line-height: 1; }
-:root.paysage:not(.survie):not([data-theme="rouge"]) input { background: rgba(255, 249, 240, .85); }
+
+/* ---------- Thème « Studio » : univers de logiciel de création pro (d'après l'ambiance de Hype 4) ----------
+   Fonds graphite en dégradé, panneaux anthracite à fines bordures, grands titres fins, touches verte et violette, apparitions animées.
+   Réglage dans Moi ; le mode survie et le mode nuit rouge passent devant. */
+:root.studio:not(.survie):not([data-theme="rouge"]) {
+  --bg: #1C1C1E; --bg2: rgba(255, 255, 255, .07); --surface: #2A2A2D; --surface2: #323236; --ligne: rgba(255, 255, 255, .09);
+  --txt: #EDEDEF; --txt2: #A1A1A8; --txt3: #6E6E75;
+  --accent: #35C2A0; --accent2: #9B6BFF; --ambre: #F5A623; --ok: #35C2A0; --vert: #35C2A0; --warn: #F5A623; --danger: #FF5A5F;
+  --barre: rgba(40, 40, 43, .82); --verre-bord: rgba(255, 255, 255, .08);
+  --ombre: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 12px 30px -14px rgba(0, 0, 0, .7); --r: 14px;
+  color-scheme: dark;
+}
+:root.studio:not(.survie):not([data-theme="rouge"]) body { background: radial-gradient(120% 60% at 50% 0%, #4A4A4F 0%, #2A2A2D 45%, #161618 100%) fixed #161618; }
+:root.studio:not(.survie):not([data-theme="rouge"]) .titre { font-weight: 300; font-size: 36px; letter-spacing: -.02em; color: #F2F2F4; }
+:root.studio:not(.survie):not([data-theme="rouge"]) .k { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--txt3); }
+:root.studio:not(.survie):not([data-theme="rouge"]) :is(.carte, #fiches li, .plan-wrap) { border: 1px solid var(--ligne); }
+:root.studio:not(.survie):not([data-theme="rouge"]) .top { border-bottom-color: rgba(255, 255, 255, .06); }
+:root.studio:not(.survie):not([data-theme="rouge"]) .btn { border-radius: 9px; border: 1px solid rgba(255, 255, 255, .08); }
+:root.studio:not(.survie):not([data-theme="rouge"]) .btn.primaire, :root.studio:not(.survie):not([data-theme="rouge"]) .chip.on { background: linear-gradient(#3FD3AF, #2BA987); color: #0F2A23; border-color: transparent; }
+:root.studio:not(.survie):not([data-theme="rouge"]) .chip { border-radius: 8px; border: 1px solid rgba(255, 255, 255, .06); }
+:root.studio:not(.survie):not([data-theme="rouge"]) .segment { border-radius: 9px; }
+:root.studio:not(.survie):not([data-theme="rouge"]) .segment button.on { background: #4A4A50; color: #fff; }
+:root.studio:not(.survie):not([data-theme="rouge"]) input { background: #1F1F22; border: 1px solid rgba(255, 255, 255, .1); border-radius: 9px; }
+:root.studio:not(.survie):not([data-theme="rouge"]) input:focus { outline: 2px solid var(--accent2); outline-offset: 0; }
+:root.studio:not(.survie):not([data-theme="rouge"]) .proches .pastille { background: #1F1F22; border: 1px solid var(--ligne); border-radius: 9px; }
+:root.studio:not(.survie):not([data-theme="rouge"]) .tabs { border-radius: 18px; }
+:root.studio:not(.survie):not([data-theme="rouge"]) .tabs button.active { color: var(--accent); background: rgba(53, 194, 160, .12); }
+/* Liseré vert → violet sous l'en-tête, comme une piste de montage */
+:root.studio:not(.survie):not([data-theme="rouge"]) .top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); opacity: .8; }
+/* Apparitions animées en changeant d'onglet (coupées si le téléphone demande moins d'animations) */
+@media (prefers-reduced-motion: no-preference) {
+  :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > * { animation: studioEntree .45s cubic-bezier(.2, .8, .2, 1) both; }
+  :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > *:nth-child(2) { animation-delay: .04s; } :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > *:nth-child(3) { animation-delay: .08s; }
+  :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > *:nth-child(4) { animation-delay: .12s; } :root.studio:not(.survie):not([data-theme="rouge"]) .vue.active > *:nth-child(n+5) { animation-delay: .16s; }
+  :root.studio:not(.survie):not([data-theme="rouge"]) .btn, :root.studio:not(.survie):not([data-theme="rouge"]) .chip { transition: transform .15s cubic-bezier(.2, .8, .2, 1), filter .15s; }
+  :root.studio:not(.survie):not([data-theme="rouge"]) .btn:hover, :root.studio:not(.survie):not([data-theme="rouge"]) .chip:hover { filter: brightness(1.12); }
+}
+@keyframes studioEntree { from { opacity: 0; transform: translateY(14px); } }
