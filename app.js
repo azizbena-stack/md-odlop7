@@ -475,22 +475,39 @@ function majZones() {
 $('#btnZone').onclick = async () => {
   if (!plan) return;
   const info = $('#zoneInfo'), btn = $('#btnZone');
+  if (btn.disabled || $('#btnFrance').disabled) return;
   if (!navigator.onLine) return info.textContent = 'Il faut du réseau pour télécharger la carte.';
   // En 3D la vue va jusqu'à l'horizon : on prend la zone vue du dessus
   const vue = { pitch: plan.getPitch(), bearing: plan.getBearing() };
   plan.jumpTo({ pitch: 0, bearing: 0 }); const b = plan.getBounds(); plan.jumpTo(vue);
   const vec = tuilesZone(b, 14);
-  if (vec.length > 8000) return info.textContent = `Zone trop grande (${vec.length} morceaux) : zoome sur ton massif ou ton département, puis réessaie.`;
+  if (vec.length > 8000) return info.textContent = `Zone trop grande pour le détail (${vec.length} morceaux) : zoome sur ton massif ou ton département, ou prends « Toute la France » en détail moyen.`;
+  const ctr = b.getCenter(), v = COMMUNES.reduce((m, x) => { const d = distance([ctr.lat, ctr.lng], [x[1], x[2]]); return d < m[1] ? [x, d] : m; }, [null, Infinity])[0];
+  await garderCarte(btn, v ? 'autour de ' + v[0] : 'zone', (tj, style) => [
+    ...vec.map(t => remplir(tj.tiles[0], t)),
+    // Relief avec une marge : en 3D on voit jusqu'à l'horizon et une altitude manquante est prise pour 0 m (« murs » à l'écran)
+    ...tuilesZone(marge(b, 1), 9).map(t => remplir(DEM, t)), ...tuilesZone(marge(b, .3), 10, 10).map(t => remplir(DEM, t)),
+    ...tuilesZone(marge(b, .1), 12, 11).map(t => remplir(DEM, t)),
+    ...tuilesZone(b, 6).map(t => remplir(style.sources.ne2_shaded.tiles[0], t))]);
+};
+// Toute la France (Corse comprise) en détail moyen : routes principales, villes et villages, relief.
+// ponytail: zoom 10 ≈ 2 600 morceaux, ~300 Mo (mesuré le 17/11) ; au-delà MapLibre agrandit ces morceaux (prefetchZoomDelta). Zoom 14 partout = ~4,4 Go : trop pour un téléphone, d'où le bouton « zone » pour le détail.
+const FRANCE = () => new maplibregl.LngLatBounds([-5.2, 41.3], [9.6, 51.1]);
+$('#btnFrance').onclick = () => {
+  if (!navigator.onLine) return $('#zoneInfo').textContent = 'Il faut du réseau pour télécharger la carte.';
+  if (!confirm('Télécharger la carte de toute la France (environ 300 Mo, quelques minutes) ? Mieux vaut être en wifi.')) return;
+  garderCarte($('#btnFrance'), 'toute la France', (tj, style) => [
+    ...tuilesZone(FRANCE(), 10).map(t => remplir(tj.tiles[0], t)),
+    ...tuilesZone(FRANCE(), 8).map(t => remplir(DEM, t)),
+    ...tuilesZone(FRANCE(), 6).map(t => remplir(style.sources.ne2_shaded.tiles[0], t))]);
+};
+async function garderCarte(btn, nom, morceaux) {
+  const info = $('#zoneInfo');
   btn.disabled = true; info.textContent = 'Préparation…';
   try {
     const [tj, style] = await Promise.all([fetch('https://tiles.openfreemap.org/planet').then(r => r.json()), fetch(STYLE).then(r => r.json())]);
     const polices = ['Noto Sans Regular', 'Noto Sans Bold', 'Noto Sans Italic'].flatMap(f => ['0-255', '256-511', '8192-8447'].map(r => `https://tiles.openfreemap.org/fonts/${encodeURIComponent(f)}/${r}.pbf`));
-    const urls = [STYLE, 'https://tiles.openfreemap.org/planet', ...polices, ...['.json', '.png', '@2x.json', '@2x.png'].map(x => style.sprite + x),
-      ...vec.map(t => remplir(tj.tiles[0], t)),
-      // Relief avec une marge : en 3D on voit jusqu'à l'horizon et une altitude manquante est prise pour 0 m (« murs » à l'écran)
-      ...tuilesZone(marge(b, 1), 9).map(t => remplir(DEM, t)), ...tuilesZone(marge(b, .3), 10, 10).map(t => remplir(DEM, t)),
-      ...tuilesZone(marge(b, .1), 12, 11).map(t => remplir(DEM, t)),
-      ...tuilesZone(b, 6).map(t => remplir(style.sources.ne2_shaded.tiles[0], t))];
+    const urls = [STYLE, 'https://tiles.openfreemap.org/planet', ...polices, ...['.json', '.png', '@2x.json', '@2x.png'].map(x => style.sprite + x), ...morceaux(tj, style)];
     await navigator.storage?.persist?.(); // demande au téléphone de ne pas effacer ces cartes
     const c = await caches.open(ZONES), file = [...urls];
     let fait = 0, rate = 0;
@@ -503,14 +520,12 @@ $('#btnZone').onclick = async () => {
         if (++fait % 25 === 0) info.textContent = `Téléchargement de la carte… ${Math.round(fait / urls.length * 100)} %`;
       }
     }));
-    const ctr = b.getCenter(), v = COMMUNES.reduce((m, x) => { const d = distance([ctr.lat, ctr.lng], [x[1], x[2]]); return d < m[1] ? [x, d] : m; }, [null, Infinity])[0];
-    const nom = v ? 'autour de ' + v[0] : 'zone';
     S.zones = [...(S.zones || []).filter(z => z.nom !== nom), { nom, t: Date.now() }]; save(); majZones();
     const est = await navigator.storage?.estimate?.();
-    info.textContent += ` ✓ Zone prête hors ligne${est ? ` (${Math.round(est.usage / 1e6)} Mo utilisés par Repère)` : ''}${rate ? ` · ${rate} morceaux manquants, relance pour compléter` : ''}.`;
+    info.textContent += ` ✓ Carte prête hors ligne${est ? ` (${Math.round(est.usage / 1e6)} Mo utilisés par Repère)` : ''}${rate ? ` · ${rate} morceaux manquants, relance pour compléter` : ''}.`;
   } catch (e) { info.textContent = 'Téléchargement interrompu : ' + e.message; }
   btn.disabled = false;
-};
+}
 $('#btnZoneSuppr').onclick = async () => {
   if (!confirm('Effacer toutes les cartes téléchargées ? Il faudra du réseau pour les retrouver.')) return;
   await caches.delete(ZONES); S.zones = []; save(); majZones();
