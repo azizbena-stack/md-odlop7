@@ -57,3 +57,12 @@ export function sunTimes(date, lat, lon) {
   const set = Jt(transit(w));
   return { noon: toDate(noon), rise: toDate(noon - (set - noon)), set: toDate(set) };
 }
+
+// Écart entre deux caps, en degrés (0 à 180) : 359° et 1° sont à 2° l'un de l'autre
+export const ecartAngle = (a, b) => Math.abs(((b - a) % 360 + 540) % 360 - 180);
+
+// « Devant moi » : les lieux (déjà munis de d et cap, comme ceux de nearest) à moins de demi° du cap visé, du plus proche au plus loin.
+// garder : clés déjà affichées, qui restent tant qu'elles sont à moins de demi + marge° (la liste ne clignote pas au bord du cône)
+export function devant(lieux, cap, demi = 30, garder = new Set(), marge = 8, cle = n => n.cle) {
+  return lieux.filter(n => ecartAngle(cap, n.cap) <= (garder.has(cle(n)) ? demi + marge : demi)).sort((a, b) => a.d - b.d);
+}

@@ -1,4 +1,4 @@
-import { distance, bearing, nearest, cardinal, fmtDist, dms, sunTimes } from './geo.js';
+import { distance, bearing, nearest, cardinal, fmtDist, dms, sunTimes, ecartAngle, devant } from './geo.js';
 import { FICHES, CATS, risquesLocaux } from './guide.js';
 
 const $ = s => document.querySelector(s);
@@ -57,7 +57,9 @@ const ici = () => [pos.coords.latitude, pos.coords.longitude];
 function demarrerGps() {
   if (!navigator.geolocation) return popup('<h2>GPS indisponible</h2><p>Ce navigateur ne donne pas accès à la position.</p>');
   $('#posMeta').textContent = 'Recherche des satellites…';
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
   watchId = navigator.geolocation.watchPosition(onPos, e => {
+    if (e.code === 1) { navigator.geolocation.clearWatch(watchId); watchId = null; guidageEnAttente = false; }
     const ios = /iPhone|iPad/.test(navigator.userAgent);
     $('#posMeta').textContent = e.code !== 1 ? 'Signal GPS faible : va dans un endroit dégagé.'
       : ios ? 'Localisation refusée. Réglages › Confidentialité et sécurité › Service de localisation › Sites web Safari : « Lorsque l\'app est active ». Puis Réglages › Apps › Safari › Localisation : « Demander ». Ferme et rouvre Repère.'
@@ -82,6 +84,8 @@ function onPos(p) {
   majMer();
   meteoAuto();
   majMoiPlan();
+  verifierDangers();
+  if (guidageEnAttente) { guidageEnAttente = false; $('#itiChoix').hidden = true; demarrerGuidage(); }
 }
 
 // ---------- Situation ----------
@@ -128,7 +132,7 @@ function majSituation() {
     <span class="nom"><b>${esc(n.p[1])}</b><span>${TYPES[n.p[0]][1]}${n.p[4] ? ' · ' + n.p[4] + ' m' : ''}</span></span>
     <span class="dist"><svg data-cap="${n.cap}" style="transform:rotate(${n.cap - (heading ?? 0)}deg)"><use href="#i-fleche"/></svg> ${fmtDist(n.d)}<br><small class="meta">${cardinal(n.cap)}</small></span></li>`).join('')
     || '<li class="meta">Aucun refuge ni point d\'eau répertorié à moins de 60 km.</li>';
-  dessinerRadar(here);
+  dessinerRadar(here); majDevant();
 
   // Risques du secteur (département de la commune la plus proche)
   const dep = v.p[4];
@@ -147,7 +151,9 @@ function dessinerRadar(here) {
   const vil = nearest(COMMUNES, here, 12).filter(n => n.d < R);
   const rotH = -(heading ?? 0);
   const xy = (n) => { const a = (n.cap + rotH) * Math.PI / 180, r = n.d / R * 100; return [Math.sin(a) * r, -Math.cos(a) * r]; };
-  svg.innerHTML = `
+  const a = DEMI_CONE * Math.PI / 180, cone = modeDevant && heading != null
+    ? `<path d="M0 0 L${(-Math.sin(a) * 100).toFixed(1)} ${(-Math.cos(a) * 100).toFixed(1)} A100 100 0 0 1 ${(Math.sin(a) * 100).toFixed(1)} ${(-Math.cos(a) * 100).toFixed(1)}Z" fill="var(--accent)" opacity=".16"/>` : '';
+  svg.innerHTML = `${cone}
     <circle class="anneau" r="100"/><circle class="anneau" r="66" stroke-dasharray="2 3"/><circle class="anneau" r="33" stroke-dasharray="2 3"/>
     <text x="3" y="-68">3,3 km</text><text x="3" y="-35">1,7 km</text>
     <g transform="rotate(${rotH})"><text x="-4" y="-103" style="fill:var(--accent);font-size:10px">N</text></g>
@@ -156,8 +162,50 @@ function dessinerRadar(here) {
     <circle r="6" fill="var(--accent)"/><circle r="12" fill="none" stroke="var(--accent)" opacity=".4"/>`;
 }
 
+// ---------- Devant moi : ce qu'il y a du côté où pointe le haut du téléphone (à une bifurcation) ----------
+const DEMI_CONE = 30; // ponytail: ±30° réglage de départ ; à élargir si on rate des lieux dehors
+const TYPES_DEVANT = ['eau', 'refuge', 'cabane', 'gite', 'abri'];
+let modeDevant = false, compasMuet = false, devantLieux = [], devantPour = null, devantRendu = null, devantVus = new Set(), devantDoigt = 0;
+function lieuxAutour(here) { // les candidats dans le rayon du radar, recherchés une fois tous les 25 m
+  if (devantPour && distance(devantPour, here) < 25) return devantLieux;
+  const pts = nearest(POINTS.filter(p => TYPES_DEVANT.includes(p[0])), here, 80, p => [p[2], p[3]]).filter(n => n.d < 5000)
+    .map(n => ({ cle: 'p' + n.p[2] + ',' + n.p[3], ll: [n.p[2], n.p[3]], nom: n.p[1], type: TYPES[n.p[0]] }));
+  const vil = nearest(COMMUNES, here, 25).filter(n => n.d < 5000)
+    .map(n => ({ cle: 'c' + n.p[1] + ',' + n.p[2], ll: [n.p[1], n.p[2]], nom: n.p[0], type: ['🏘', 'Village'] }));
+  devantPour = here; return devantLieux = [...pts, ...vil];
+}
+function majDevant() {
+  if (!modeDevant) return;
+  const info = $('#devantInfo'), ul = $('#devantListe'), vide = t => { info.textContent = t; ul.innerHTML = ''; devantRendu = null; };
+  if (!pos) return vide('Position inconnue : active le GPS en haut de l\'onglet. Sans position, Repère ne sait pas ce qui est devant toi.');
+  if (heading == null) return vide(compasMuet ? 'Ton téléphone ne donne pas de direction (pas de boussole, ou accès aux capteurs refusé). Repasse sur « Tout autour » : le radar marche avec le nord en haut.'
+    : 'Attente de la boussole… tiens le téléphone à plat, le haut vers le chemin.');
+  if (devantDoigt) return; // doigt posé sur la liste : rien ne bouge sous le doigt
+  const here = ici();
+  // Stabilité : on ne refait la liste que si l'on a tourné de plus de 8° ou marché plus de 15 m
+  if (devantRendu && ecartAngle(devantRendu.cap, heading) < 8 && distance(devantRendu.ll, here) < 15) return;
+  const lieux = lieuxAutour(here).map(n => ({ ...n, d: distance(here, n.ll), cap: bearing(here, n.ll) })).filter(n => n.d > 80); // à moins de 80 m : on y est, la direction ne veut rien dire
+  const res = devant(lieux, heading, DEMI_CONE, devantVus).slice(0, 12);
+  devantVus = new Set(res.map(n => n.cle)); devantRendu = { cap: heading, ll: here };
+  info.innerHTML = `Tu vises <b>${Math.round(heading)}° · ${cardinal(heading)}</b> · lieux à ±${DEMI_CONE}° jusqu'à 5 km`;
+  ul.innerHTML = res.map(n => `<li data-ll="${n.ll}" data-nom="${esc(n.nom)}"><span class="pastille">${n.type[0]}</span>
+    <span class="nom"><b>${esc(n.nom)}</b><span>${n.type[1]}</span></span><span class="dist">${fmtDist(n.d)}<br><small class="meta">à vol d'oiseau</small></span></li>`).join('')
+    || '<li class="meta">Aucun refuge, village ni point d\'eau de ce côté à moins de 5 km. Tourne-toi doucement ou repasse sur « Tout autour ».</li>';
+}
+$('#btnDevant').onclick = () => {
+  modeDevant = !modeDevant;
+  const b = $('#btnDevant'); b.classList.toggle('on', modeDevant); b.setAttribute('aria-pressed', modeDevant); b.textContent = modeDevant ? 'Tout autour' : 'Devant moi';
+  $('#radarTitre').textContent = modeDevant ? 'Devant moi' : 'Autour de toi';
+  $('#proches').hidden = modeDevant; $('#devantListe').hidden = $('#devantInfo').hidden = !modeDevant;
+  if (modeDevant && heading == null && !$('#btnCompas').hidden) demarrerCompas(); // le toucher sert d'autorisation sur iPhone
+  devantRendu = null; devantVus = new Set(); majDevant(); if (pos) dessinerRadar(ici());
+};
+// Doigt sur la liste : on la fige, et un peu après l'avoir levé (le temps que le toucher arrive)
+$('#devantListe').addEventListener('pointerdown', () => { clearTimeout(devantDoigt); devantDoigt = -1; });
+['pointerup', 'pointercancel'].forEach(t => $('#devantListe').addEventListener(t, () => { devantDoigt = setTimeout(() => { devantDoigt = 0; majDevant(); }, 600); }));
+
 // Toucher un repère (liste ou radar) : la carte s'ouvre dessus avec l'itinéraire ; sans réseau, « Suivre à la boussole »
-$('#proches').onclick = $('#radar').onclick = e => {
+$('#proches').onclick = $('#radar').onclick = $('#devantListe').onclick = e => {
   const el = e.target.closest('[data-ll]'); if (!el) return;
   const ll = el.dataset.ll.split(',').map(Number);
   ouvrir('carte'); initPlan(); // tout de suite (pas au tour suivant) pour poser le repère
@@ -314,7 +362,7 @@ function construireRose() {
 construireRose();
 
 async function demarrerCompas() {
-  try { if (typeof DeviceOrientationEvent?.requestPermission === 'function' && await DeviceOrientationEvent.requestPermission() !== 'granted') throw 0; } catch { return popup('<h2>Boussole refusée</h2><p>Autorise l\'accès aux capteurs de mouvement pour utiliser la boussole.</p>'); }
+  try { if (typeof DeviceOrientationEvent?.requestPermission === 'function' && await DeviceOrientationEvent.requestPermission() !== 'granted') throw 0; } catch { compasMuet = true; majDevant(); return popup('<h2>Boussole refusée</h2><p>Autorise l\'accès aux capteurs de mouvement pour utiliser la boussole.</p>'); }
   const onOri = e => {
     let h = e.webkitCompassHeading ?? (e.absolute && e.alpha != null ? 360 - e.alpha : null);
     if (h == null) return;
@@ -324,7 +372,7 @@ async function demarrerCompas() {
   addEventListener('deviceorientationabsolute', onOri);
   addEventListener('deviceorientation', onOri);
   $('#btnCompas').hidden = true;
-  setTimeout(() => { if (heading == null) $('#cibleInfo').textContent = 'Pas de capteur de boussole sur cet appareil. Les flèches pointent avec le nord en haut.'; }, 3000);
+  setTimeout(() => { if (heading == null) { compasMuet = true; majDevant(); $('#cibleInfo').textContent = 'Pas de capteur de boussole sur cet appareil. Les flèches pointent avec le nord en haut.'; } }, 3000);
 }
 $('#btnCompas').onclick = demarrerCompas;
 
@@ -337,6 +385,7 @@ function majBoussole() {
       $('#rose').style.transform = `rotate(${-heading}deg)`;
       $$('[data-cap]').forEach(el => rot(el, +el.dataset.cap));
       if (pos) dessinerRadar(ici());
+      majDevant();
     }
     const c = S.points.find(p => p.id === S.cible), f = $('#cibleFleche');
     if (c && pos) {
@@ -463,7 +512,8 @@ function initPlan() {
     if (e.originalEvent.target.closest?.('.maplibregl-marker')) return;
     const { x, y } = e.point, alt = plan.queryRenderedFeatures([[x - 10, y - 10], [x + 10, y + 10]], { layers: ['route-alt'] })[0];
     if (alt) return choisirIti(alt.properties.i); // toucher un autre itinéraire le choisit, comme dans les GPS
-    choisirDest([e.lngLat.lat, e.lngLat.lng], 'Point sur la carte');
+    const ll = [e.lngLat.lat, e.lngLat.lng], [v] = COMMUNES.length ? nearest(COMMUNES, ll) : [];
+    choisirDest(ll, v ? `Près de ${v.p[0]} (${v.p[4]})` : 'Point sur la carte');
   });
   plan.on('dragstart', () => { suivre = false; });
   plan.on('moveend', majPointsPlan);
@@ -511,6 +561,7 @@ function cadrerGuidage() {
     padding: { top: Math.round(plan.getContainer().clientHeight * .45), bottom: 0, left: 0, right: 0 } });
 }
 function demarrerGuidage() {
+  initPlan();
   if (!plan || !pos || !S.route?.geo?.length) return;
   guidage = true; suivre = true; moiMk?.remove(); moiMk = null; anim = affiche = null;
   const el = document.createElement('div'); el.className = 'plan-nav';
@@ -518,9 +569,11 @@ function demarrerGuidage() {
   navMk = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(lnglat(ici())).addTo(plan);
   $('#navBandeau').hidden = false; $('#itiChoix').hidden = true; $('#btnPlein').hidden = true; // pendant le guidage : toujours plein écran, on arrête avec la croix du bandeau vert
   if (!$('.plan-wrap').classList.contains('plein')) $('#btnPlein').click(); // plein écran, comme un GPS de voiture
+  voixEtape = { depart: true }; horsRoute = false; dire(`C'est parti vers ${S.route.dest.nom}.`, true);
   dessinerRoute(S.route, false); majGuidage(); cadrerGuidage();
 }
 function arreterGuidage(msg) {
+  if (!msg) speechSynthesis?.cancel();
   guidage = false; navMk?.remove(); navMk = null; anim = affiche = null; cancelAnimationFrame(rafNav); rafNav = 0;
   $('#navBandeau').hidden = true; $('#btnPlein').hidden = false; if (S.route) dessinerRoute(S.route, false);
   if ($('.plan-wrap').classList.contains('plein')) $('#btnPlein').click();
@@ -565,12 +618,26 @@ function majGuidage() {
   const v = pos.coords.speed, cap = v > 2 && pos.coords.heading != null && !isNaN(pos.coords.heading) ? pos.coords.heading : capRoute;
   // Sur la route, la flèche est posée sur le tracé (comme un GPS de voiture) : elle ne tremble plus à côté
   allerVers(dmin < 25 ? proj : me, cap);
-  if (distance(me, R.dest.ll) < 30) return arreterGuidage(`Tu es arrivé : ${R.dest.nom}.`);
+  if (distance(me, R.dest.ll) < 30) { dire(`Tu es arrivé : ${R.dest.nom}.`); return arreterGuidage(`Tu es arrivé : ${R.dest.nom}.`); }
   const fin = cumul[cumul.length - 1] - cumul[i0] + dmin;
   const prochaine = idxEtapes.find(e => e.i > i0);
   const dEtape = prochaine ? cumul[prochaine.i] - cumul[i0] + dmin : fin;
   $('#navConsigne').textContent = dmin > 60 ? 'Tu t\'écartes de l\'itinéraire : rejoins la ligne violette' : prochaine ? prochaine.t : 'Tout droit jusqu\'à l\'arrivée';
   $('#navDist').textContent = `Dans ${fmtDist(dEtape)} · arrivée à ${fmtDist(fin)}`;
+  annoncer(prochaine, dEtape, dmin);
+}
+// Voix du guidage : une annonce « Dans 300 mètres, … » puis la consigne au moment de tourner (distances plus longues en voiture)
+let voixEtape = {}, horsRoute = false;
+const minuscule = t => t[0].toLowerCase() + t.slice(1);
+function annoncer(prochaine, dEtape, dmin) {
+  if (dmin > 60) { if (!horsRoute) dire('Tu t\'écartes de l\'itinéraire. Rejoins la ligne violette.'); horsRoute = true; return; }
+  horsRoute = false;
+  if (!prochaine) return;
+  const vite = (pos.coords.speed || 0) > 8, proche = vite ? 200 : 40, loin = vite ? 1500 : 300;
+  if (voixEtape.i !== prochaine.i) voixEtape = { i: prochaine.i };
+  if (prochaine.t === 'Tu es arrivé') { if (!voixEtape.loin && dEtape <= loin) { voixEtape.loin = true; dire(`Arrivée dans ${parleDist(dEtape)}.`); } return; } // « Tu es arrivé » est dit une seule fois, à l'arrivée
+  if (!voixEtape.proche && dEtape <= proche) { voixEtape.proche = voixEtape.loin = true; dire(prochaine.t); }
+  else if (!voixEtape.loin && (dEtape <= loin || voixEtape.depart)) { voixEtape.loin = true; dire(`Dans ${parleDist(dEtape)}, ${minuscule(prochaine.t)}.`); }
 }
 // Flèche continue : entre deux positions GPS (environ 1 par seconde), elle glisse et tourne image par image,
 // et la caméra la suit au même rythme (plus de sauts)
@@ -591,6 +658,8 @@ function boucleNav(t) {
   if (k < 1) rafNav = requestAnimationFrame(boucleNav);
 }
 $('#navStop').onclick = () => arreterGuidage();
+$('#navVoix').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (!S.voix) speechSynthesis?.cancel(); else dire('Voix activée.'); };
+$('#navDanger').onclick = () => signalerDanger();
 
 // Refuges, points d'eau, hôpitaux… et mes points, quand on zoome assez
 function majPointsPlan() {
@@ -598,6 +667,8 @@ function majPointsPlan() {
   ptsMk.forEach(m => m.remove()); ptsMk = [];
   const b = plan.getBounds();
   S.points.forEach(p => ptsMk.push(marqueur([p.lat, p.lon], 'plan-mien').setPopup(new maplibregl.Popup({ offset: 10 }).setText(p.nom))));
+  dangersActifs().forEach(d => ptsMk.push(marqueur([d.lat, d.lon], 'plan-pt plan-danger', SIGNALES[d.type][0]).setPopup(new maplibregl.Popup({ offset: 14 })
+    .setHTML(`<b>${SIGNALES[d.type][1]}</b><br>Signalé ${d.moi ? 'par toi' : d.par ? 'par ' + esc(d.par) : 'par ton groupe'} il y a ${depuis(Date.now() - d.t)}<br><button class="btn petit" data-suppr-danger="${esc(d.id)}">Plus là : retirer</button>`))));
   if (plan.getZoom() < 11) return;
   POINTS.filter(p => b.contains([p[3], p[2]])).slice(0, 300).forEach(p => {
     const [ico, lib] = TYPES[p[0]] || ['•', p[0]];
@@ -690,28 +761,48 @@ $('#btnZoneSuppr').onclick = async () => {
 const nomCommune = c => `${c[0]} (${c[4]})`;
 // Les communes proches passent devant, puis les plus peuplées
 const rang = c => Math.log(c[3] + 1) - (pos ? distance(ici(), [c[1], c[2]]) / 30000 : 0);
-// Villes déjà cherchées : gardées dans le téléphone, en raccourcis 🔍 sous le champ et dans les suggestions
-const optionsRecents = () => (S.recents || []).map(n => `<option value="${esc(n)}">`).join('');
-function majRecents() {
-  $('#recents').innerHTML = (S.recents || []).map(n => `<button class="chip" data-recent="${esc(n)}">🔍 ${esc(n)}</button>`).join('');
+// Mes trajets : sous la petite flèche du champ, chaque lieu (ville, refuge, point touché) avec le kilométrage du trajet choisi.
+// Les anciennes recherches (S.recents, noms seuls) sont reprises : leur kilométrage s'ajoute au prochain calcul.
+if (S.recents && !S.trajets) { S.trajets = S.recents.map(nom => ({ nom })); delete S.recents; save(); }
+function noterTrajet(R) {
+  const e = { nom: R.dest.nom, ll: R.dest.ll, d: R.d, t: R.t, mode: R.mode, date: Date.now() };
+  S.trajets = [e, ...(S.trajets || []).filter(x => x.nom !== e.nom)].slice(0, 10); save();
 }
-majRecents();
-$('#recents').onclick = e => { const b = e.target.closest('[data-recent]'); if (b) { $('#dest').value = b.dataset.recent; $('#btnIti').click(); } };
-$('#dest').onfocus = () => { if (!$('#dest').value.trim()) $('#destListe').innerHTML = optionsRecents(); };
+const jour = t => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+const sousTrajet = x => x.d ? `${fmtDist(x.d)} ${MODES[x.mode]?.[1] || ''} · ${duree(x.t * 1000)} · ${jour(x.date)}` : 'Kilométrage au prochain calcul';
+let menuItems = [], menuHist = false;
+function montrerMenu(items, hist, vide) {
+  menuItems = items; menuHist = hist;
+  $('#destMenu').innerHTML = items.map((x, i) => `<li data-i="${i}"><b>${esc(x.nom)}</b><small>${esc(x.sous)}</small></li>`).join('') || (vide ? `<li class="meta">${vide}</li>` : '');
+  $('#destMenu').hidden = !$('#destMenu').innerHTML; $('#destHist').setAttribute('aria-expanded', hist && !$('#destMenu').hidden);
+}
+const fermerMenu = () => montrerMenu([], false);
+const menuTrajets = () => montrerMenu((S.trajets || []).map(x => ({ ...x, sous: sousTrajet(x) })), true, 'Pas encore de trajet. Cherche une ville ou touche la carte.');
+$('#destHist').onclick = e => { e.stopPropagation(); menuHist ? fermerMenu() : menuTrajets(); };
 $('#dest').oninput = () => {
-  const q = norm($('#dest').value.trim()); if (q.length < 2) return void ($('#destListe').innerHTML = optionsRecents());
-  $('#destListe').innerHTML = COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a)).slice(0, 8)
-    .map(c => `<option value="${esc(nomCommune(c))}">`).join('');
+  const q = norm($('#dest').value.trim()); if (q.length < 2) return fermerMenu();
+  montrerMenu(COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a)).slice(0, 8)
+    .map(c => ({ nom: nomCommune(c), ll: [c[1], c[2]], sous: pos ? `${fmtDist(distance(ici(), [c[1], c[2]]))} à vol d'oiseau` : `${c[3].toLocaleString('fr-FR')} hab.` })), false);
 };
-$('#dest').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnIti').click(); });
+// pointerdown sans effet par défaut : le champ garde le focus, le premier toucher choisit bien la ligne (sur iPhone il fallait parfois toucher deux fois)
+$('#destMenu').addEventListener('pointerdown', e => e.preventDefault());
+$('#destMenu').onclick = e => {
+  const x = menuItems[e.target.closest('[data-i]')?.dataset.i]; if (!x) return;
+  $('#dest').value = x.nom; fermerMenu(); $('#dest').blur();
+  x.ll ? choisirDest(x.ll, x.nom) : $('#btnIti').click();
+};
+document.addEventListener('click', e => { if (!e.target.closest('.dest-champ')) fermerMenu(); });
+$('#dest').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#btnIti').click(); } });
 $('#btnIti').onclick = () => {
+  fermerMenu(); $('#dest').blur();
   const v = $('#dest').value.trim(), q = norm(v.replace(/\s*\(\w+\)$/, ''));
-  if (!v) return destination ? calculerIti() : $('#dest').focus();
+  if (!v) return destination ? calculerIti() : menuTrajets();
+  const h = (S.trajets || []).find(x => x.nom === v && x.ll); if (h) return choisirDest(h.ll, h.nom); // refuge, point touché… déjà fait
   const c = COMMUNES.find(c => nomCommune(c) === v) || COMMUNES.filter(c => norm(c[0]) === q).sort((a, b) => rang(b) - rang(a))[0]
     || COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a))[0];
   if (!c) return $('#itiRes').textContent = 'Commune introuvable. Vérifie l\'orthographe ou touche la carte.';
-  S.recents = [nomCommune(c), ...(S.recents || []).filter(n => n !== nomCommune(c))].slice(0, 6); save(); majRecents();
-  choisirDest([c[1], c[2]], c[0]);
+  $('#dest').value = nomCommune(c);
+  choisirDest([c[1], c[2]], nomCommune(c));
 };
 function majModes() { $$('#modes .chip').forEach(c => c.classList.toggle('on', c.dataset.mode === modeIti)); }
 $('#modes').onclick = e => { const b = e.target.closest('[data-mode]'); if (!b) return; modeIti = b.dataset.mode; majModes(); if (destination) calculerIti(); };
@@ -728,46 +819,58 @@ function consigne(s) {
   const m = s.maneuver, sens = SENS[m.modifier] || '', rue = s.name ? ` sur ${s.name}` : '';
   if (m.type === 'depart') return `Pars${rue}`;
   if (m.type === 'arrive') return 'Tu es arrivé';
-  if (m.type === 'roundabout' || m.type === 'rotary') return `Au rond-point, prends la ${m.exit || 1}ᵉ sortie${rue}`;
+  if (m.type === 'roundabout' || m.type === 'rotary') return `Au rond-point, prends la ${(m.exit || 1) === 1 ? '1ʳᵉ' : m.exit + 'ᵉ'} sortie${rue}`;
   if (m.type === 'fork') return `À la fourche, prends ${sens}${rue}`;
   if (m.modifier === 'uturn') return `Fais demi-tour${rue}`;
   if (m.modifier === 'straight' || !sens) return `Continue tout droit${rue}`;
   return `Tourne ${sens}${rue}`;
 }
 
+// « Y aller » qui bloquait : pas de délai max (une demande pouvait pendre longtemps), 3 demandes d'un coup au serveur gratuit
+// (refus fréquents), et une réponse lente pouvait écraser un trajet demandé après. Maintenant : 15 s max, 2e essai,
+// trajet principal affiché tout de suite, variantes ensuite, réponses périmées ignorées.
+let calcId = 0;
 async function calculerIti() {
   if (!destination) return;
+  const id = ++calcId, dest = destination, mode = modeIti;
   const dep = pos ? ici() : plan ? [plan.getCenter().lat, plan.getCenter().lng] : null;
   if (!dep) return $('#itiRes').textContent = 'Position inconnue : active le GPS.';
-  $('#itiRes').textContent = `Calcul de l'itinéraire ${MODES[modeIti][1]} vers ${destination.nom}…`;
+  $('#itiRes').textContent = `Calcul de l'itinéraire ${MODES[mode][1]} vers ${dest.nom}…`;
   $('#btnItiBoussole').hidden = false;
   try {
     // Le serveur gratuit ne propose qu'un trajet : on en demande deux autres qui passent par un point à gauche
     // et à droite de la ligne droite, et on garde ceux qui sont vraiment différents et pas trop longs (comme un GPS)
     // ponytail: variantes par point de passage, pas de vrais « alternatives » ; un serveur OSRM à nous si ça ne suffit pas
-    const [la1, lo1] = dep, [la2, lo2] = destination.ll, ml = (la1 + la2) / 2, c = Math.cos(ml * Math.PI / 180);
+    const [la1, lo1] = dep, [la2, lo2] = dest.ll, ml = (la1 + la2) / 2, c = Math.cos(ml * Math.PI / 180);
     const cote = k => [ml + k * .3 * (lo2 - lo1) * c, (lo1 + lo2) / 2 - k * .3 * (la2 - la1) / c];
-    const url = pts => `https://routing.openstreetmap.de/${MODES[modeIti][0]}/route/v1/driving/${pts.map(p => `${p[1]},${p[0]}`).join(';')}?overview=full&geometries=geojson&steps=true&continue_straight=true`;
-    const lire = r => r?.code === 'Ok' && r.routes?.[0] ? r.routes[0] : null;
-    const [r0, ...rv] = await Promise.all([[dep, destination.ll], [dep, cote(1), destination.ll], [dep, cote(-1), destination.ll]]
-      .map(pts => fetch(url(pts)).then(r => r.json()).catch(() => null)));
-    if (!lire(r0)) throw new Error(r0?.message || 'aucun chemin trouvé');
+    const url = pts => `https://routing.openstreetmap.de/${MODES[mode][0]}/route/v1/driving/${pts.map(p => `${p[1]},${p[0]}`).join(';')}?overview=full&geometries=geojson&steps=true&continue_straight=true`;
+    const lire = pts => fetch(url(pts), { signal: AbortSignal.timeout?.(15000) }).then(r => r.json())
+      .then(r => r?.code === 'Ok' && r.routes?.[0] ? r.routes[0] : Promise.reject(new Error(r?.message || 'aucun chemin trouvé')));
+    let r0;
+    try { r0 = await lire([dep, dest.ll]); } catch { if (id !== calcId) return; await new Promise(f => setTimeout(f, 1200)); r0 = await lire([dep, dest.ll]); }
+    if (id !== calcId) return;
     const enAlt = rt => ({
       d: rt.distance, t: rt.duration, via: [...new Set(rt.legs.flatMap(l => l.summary.split(', ')).filter(Boolean))].slice(0, 2).join(', '),
       geo: rt.geometry.coordinates.map(([lo, la]) => [+la.toFixed(5), +lo.toFixed(5)]),
       etapes: rt.legs.flatMap((l, k) => l.steps.filter(s => !(s.maneuver.type === 'arrive' && k < rt.legs.length - 1) && !(s.maneuver.type === 'depart' && k > 0)))
         .map(s => [consigne(s), Math.round(s.distance), [+s.maneuver.location[1].toFixed(5), +s.maneuver.location[0].toFixed(5)]]),
     });
-    const alts = [enAlt(lire(r0))];
+    const alts = [enAlt(r0)];
+    S.route = { dest, mode, alts, choix: 0, ...alts[0] };
+    noterTrajet(S.route); proposerItis(); dessinerRoute(S.route, true);
+    // Variantes à gauche / à droite, sans faire attendre le trajet principal
+    const rv = await Promise.all([1, -1].map(k => lire([dep, cote(k), dest.ll]).catch(() => null)));
+    if (id !== calcId || guidage || S.route?.alts !== alts) return;
     const commun = (a, b) => { let n = 0, k = 0; for (; k < a.length; k += 5) if (b.some((q, j) => j % 3 === 0 && distance(a[k], q) < 40)) n++; return n / Math.ceil(a.length / 5); };
-    rv.map(lire).filter(Boolean).map(enAlt).sort((a, b) => a.t - b.t)
+    rv.filter(Boolean).map(enAlt).sort((a, b) => a.t - b.t)
       .forEach(a => { if (a.t < alts[0].t * 1.5 && alts.every(b => commun(a.geo, b.geo) < .8)) alts.push(a); });
-    S.route = { dest: destination, mode: modeIti, alts, choix: 0, ...alts[0] };
-    save(); proposerItis(); dessinerRoute(S.route, true);
+    if (alts.length < 2) return;
+    save(); dessinerRoute(S.route, S.route.choix === 0); if (!$('#itiChoix').hidden) proposerItis();
   } catch (e) {
-    const d = distance(dep, destination.ll);
-    $('#itiRes').innerHTML = (navigator.onLine ? `Itinéraire impossible (${esc(e.message)}).` : 'Pas de réseau : l\'itinéraire se calcule en ligne.')
-      + ` ${esc(destination.nom)} est à ${fmtDist(d)} à vol d'oiseau, direction ${cardinal(bearing(dep, destination.ll))}. La boussole peut t'y guider en ligne droite.`;
+    if (id !== calcId) return;
+    const d = distance(dep, dest.ll), raison = e.name === 'TimeoutError' ? 'le serveur ne répond pas, retouche « Y aller »' : e.message;
+    $('#itiRes').innerHTML = (navigator.onLine ? `Itinéraire impossible (${esc(raison)}).` : 'Pas de réseau : l\'itinéraire se calcule en ligne.')
+      + ` ${esc(dest.nom)} est à ${fmtDist(d)} à vol d'oiseau, direction ${cardinal(bearing(dep, dest.ll))}. La boussole peut t'y guider en ligne droite.`;
   }
 }
 function dessinerRoute(R, cadrer) {
@@ -801,7 +904,7 @@ function majBulles(R) {
 }
 function choisirIti(i) {
   const R = S.route; if (!R?.alts?.[i] || guidage) return;
-  Object.assign(R, R.alts[i], { choix: i }); save(); dessinerRoute(R, false);
+  Object.assign(R, R.alts[i], { choix: i }); noterTrajet(R); dessinerRoute(R, false);
   if (!$('#itiChoix').hidden) proposerItis();
 }
 // Feuille du bas : les itinéraires (durée, distance, par où), puis « Y aller »
@@ -818,8 +921,10 @@ $('#itiListe').onclick = e => {
   const m = e.target.closest('[data-mode2]'); if (m) { modeIti = m.dataset.mode2; majModes(); return calculerIti(); }
   const b = e.target.closest('[data-iti]'); if (b) choisirIti(+b.dataset.iti);
 };
+let guidageEnAttente = false;
 $('#itiGo').onclick = () => {
-  if (!pos) { $('#btnGps')?.click(); $('#itiGo').textContent = 'Recherche du GPS… puis touche ici'; return; }
+  debloquerSon(); // iPhone : la voix et les bips ne marchent qu'après un toucher
+  if (!pos) { guidageEnAttente = true; if (watchId == null) demarrerGps(); $('#itiGo').textContent = 'Recherche du GPS… le guidage partira tout seul'; return; }
   $('#itiChoix').hidden = true; demarrerGuidage();
 };
 $('#itiFermer').onclick = () => { $('#itiChoix').hidden = true; };
@@ -886,6 +991,83 @@ $('#btnSifflet').onclick = () => {
   const cycle = () => { if (!siffle) return; [0, 1500, 3000].forEach(t => setTimeout(() => siffle && bip(900), t)); siffleT = setTimeout(cycle, 8000); };
   cycle();
 };
+
+// ---------- Voix (synthèse vocale du téléphone, hors ligne sur iPhone et la plupart des Android) ----------
+S.voix ??= true; S.alerteDanger ??= true;
+function dire(t, urgent) {
+  if (!S.voix || !window.speechSynthesis) return;
+  if (urgent) speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(t), v = speechSynthesis.getVoices().find(v => /^fr\b/i.test(v.lang));
+  u.lang = 'fr-FR'; if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+const parleDist = m => m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} mètres` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} kilomètres`;
+function debloquerSon() {
+  try { (ctx ??= new AudioContext()).resume(); } catch {}
+  if (S.voix && window.speechSynthesis && !debloquerSon.fait) { debloquerSon.fait = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
+}
+addEventListener('pointerdown', debloquerSon, { once: true });
+function majVoix() {
+  $('#navVoix').textContent = S.voix ? '🔊' : '🔇'; $('#navVoix').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix');
+  $('#btnVoixGps').setAttribute('aria-pressed', S.voix); $('#btnAlerteDanger').setAttribute('aria-pressed', S.alerteDanger);
+}
+majVoix();
+$('#btnVoixGps').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (S.voix) dire('Voix du guidage activée.'); else speechSynthesis?.cancel(); };
+$('#btnAlerteDanger').onclick = () => { S.alerteDanger = !S.alerteDanger; save(); majVoix(); if (S.alerteDanger) sonnerieDanger(); };
+
+// ---------- Dangers signalés : arbre tombé, trou, obstacle… (par moi ou mon groupe), sonnerie en approchant ----------
+const SIGNALES = { arbre: ['🌲', 'Arbre tombé'], trou: ['🕳', 'Trou'], obstacle: ['🚧', 'Obstacle'], eboul: ['🪨', 'Éboulement'], eau: ['🌊', 'Passage inondé'], glace: ['🧊', 'Verglas · neige'], animal: ['🐗', 'Animal dangereux'], autre: ['⚠', 'Autre danger'] };
+const VIE_DANGER = 7 * 864e5; // ponytail: un signalement compte 7 jours, ensuite on le croit réglé
+S.dangers ??= [];
+const dangersActifs = () => S.dangers.filter(d => Date.now() - d.t < VIE_DANGER);
+function signalerDanger() {
+  if (!pos) return popup('<h2>Position inconnue</h2><p>Active le GPS : le danger est posé à l\'endroit où tu te trouves.</p>');
+  popup(`<div class="k">Signaler un danger ici</div><h2>Qu'est-ce qu'il y a ?</h2>
+    <div class="grille-danger">${Object.entries(SIGNALES).map(([k, [i, l]]) => `<button class="tuile" data-signal="${k}"><b>${i}</b><span>${l}</span></button>`).join('')}</div>
+    <p class="note">Gardé 7 jours dans ton téléphone, envoyé à ton groupe s'il est connecté par le réseau. Ceux qui approchent entendent une alerte. Ne signale que ce que tu as vu : un faux signalement peut mettre des gens en danger.</p>`);
+}
+$('#btnDanger').onclick = signalerDanger;
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-signal]');
+  if (b && pos) {
+    const [la, lo] = ici(), d = { id: S.idProxi + '-' + Date.now().toString(36), type: b.dataset.signal, lat: +la.toFixed(5), lon: +lo.toFixed(5), t: Date.now(),
+      par: (S.fiche.surnom || S.fiche.nom || '').slice(0, 12), moi: true };
+    S.dangers = [d, ...S.dangers].slice(0, 300); save(); dangersVus.add(d.id); // pas d'alerte pour celui qu'on vient de poser
+    if (!NATIF && proxiOn) Proxi.danger(d); // ponytail: l'APK (Bluetooth, 13 octets) ne transmet pas encore les dangers
+    modal.close(); majPointsPlan(); dire(`${SIGNALES[d.type][1]} signalé.`);
+  }
+  const s = e.target.closest('[data-suppr-danger]');
+  if (s) { S.dangers = S.dangers.filter(d => d.id !== s.dataset.supprDanger); save(); majPointsPlan(); }
+});
+function recevoirDanger(d) {
+  if (!d || !SIGNALES[d.type] || !isFinite(d.lat) || !isFinite(d.lon) || !isFinite(d.t) || S.dangers.some(x => x.id === d.id)) return;
+  S.dangers = [{ id: String(d.id).slice(0, 40), type: d.type, lat: +d.lat, lon: +d.lon, t: Math.min(+d.t, Date.now()), par: String(d.par || '').slice(0, 12) }, ...S.dangers].slice(0, 300);
+  save(); majPointsPlan(); verifierDangers();
+}
+function sonnerieDanger() { [0, 300, 600].forEach(t => setTimeout(() => bip(180, 1500), t)); setTimeout(() => bip(450, 1000), 900); }
+let dangersVus = new Set(), dangersFiches = null, alerteT = 0;
+function verifierDangers() {
+  if (!S.alerteDanger || !pos) return;
+  const me = ici(), v = pos.coords.speed || 0, seuil = v > 8 ? 500 : 150; // à pied 150 m, en voiture 500 m
+  const capGps = v > 1 && pos.coords.heading != null && !isNaN(pos.coords.heading) ? pos.coords.heading : null;
+  dangersFiches ??= POINTS.length ? POINTS.filter(p => p[0] === 'danger') : null; // passages délicats de refuges.info
+  const liste = [...dangersActifs().map(d => ({ id: d.id, ll: [d.lat, d.lon], lib: SIGNALES[d.type][1], ico: SIGNALES[d.type][0], qui: d.moi ? 'par toi' : d.par ? 'par ' + d.par : 'par ton groupe', t: d.t })),
+    ...(dangersFiches || []).map(p => ({ id: 'ri' + p[2] + ',' + p[3], ll: [p[2], p[3]], lib: 'Passage délicat : ' + p[1], ico: '⚠', qui: 'sur refuges.info' }))];
+  for (const x of liste) {
+    const d = distance(me, x.ll);
+    if (d > seuil * 2) { dangersVus.delete(x.id); continue; } // réarmée une fois loin
+    if (d > seuil || dangersVus.has(x.id)) continue;
+    if (capGps != null && d > 30 && ecartAngle(capGps, bearing(me, x.ll)) > 70) continue; // derrière moi : pas d'alerte
+    dangersVus.add(x.id);
+    sonnerieDanger(); navigator.vibrate?.([300, 120, 300, 120, 600]);
+    dire(`Attention : ${x.lib.replace(/ :.*/, '')} signalé à ${parleDist(d)}.`, true);
+    const el = $('#alerteDanger');
+    el.innerHTML = `<span class="ico">${x.ico}</span><span><b>${esc(x.lib)}</b><small>À ${fmtDist(d)} · signalé ${esc(x.qui)}${x.t ? ' il y a ' + depuis(Date.now() - x.t) : ''}</small></span><button aria-label="Fermer">✕</button>`;
+    el.hidden = false; clearTimeout(alerteT); alerteT = setTimeout(() => { el.hidden = true; }, 15000);
+    break;
+  }
+}
+$('#alerteDanger').onclick = () => { $('#alerteDanger').hidden = true; };
 
 // ---------- SOS : message vocal en boucle ----------
 let voixUrl = null, voixLoop = 0, rec = null;
@@ -1288,13 +1470,16 @@ function proxiReseau() {
   const ecoute = {}, enc = new TextEncoder();
   let es = null, cle = null, sujet = null, derniere = 0, derniereCharge = null, attente = null;
   const emettre = (nom, v) => ecoute[nom]?.(v);
-  async function envoyer(c) {
-    derniereCharge = c; attente = null; derniere = Date.now();
+  async function publier(c, siEchec) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ch = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cle, enc.encode(JSON.stringify(c))));
     fetch(RELAIS + sujet, { method: 'POST', body: b64(iv) + '.' + b64(ch) })
       .then(r => { if (!r.ok) emettre('etat', { erreur: r.status === 429 ? 'Relais saturé : nouvel essai bientôt' : 'Relais indisponible' }); })
-      .catch(() => { attente = c; emettre('etat', { erreur: 'Pas de réseau : position en attente' }); });
+      .catch(siEchec);
+  }
+  function envoyer(c) {
+    derniereCharge = c; attente = null; derniere = Date.now();
+    return publier(c, () => { attente = c; emettre('etat', { erreur: 'Pas de réseau : position en attente' }); });
   }
   // Toutes les 15 s : envoie si on a bougé (au plus toutes les 2 min), sinon un signe de vie toutes les 10 min
   setInterval(() => {
@@ -1319,13 +1504,15 @@ function proxiReseau() {
           if (m.event !== 'message') return;
           const [iv, ch] = m.message.split('.').map(deb64);
           const v = JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cle, ch)));
-          if (typeof v.id === 'number') emettre('trouve', { ...v, reseau: true, vu: m.time * 1000 });
+          if (v.danger) emettre('danger', v.danger);
+          else if (typeof v.id === 'number') emettre('trouve', { ...v, reseau: true, vu: m.time * 1000 });
         } catch {} // message d'un autre groupe ou abîmé
       };
       await envoyer(c);
       return { emission: true };
     },
     maj(c, force) { if (force) envoyer(c); else attente = c; },
+    danger(d) { if (es) publier({ danger: d }, () => emettre('etat', { erreur: 'Pas de réseau : danger gardé dans ton téléphone seulement' })); },
     async arreter() { es?.close(); es = null; },
   };
 }
@@ -1354,6 +1541,7 @@ const chargeProxi = () => ({
     majVoisins();
   });
   Proxi.addListener('etat', e => { $('#proxiEtat').textContent = e.erreur; });
+  if (!NATIF) Proxi.addListener('danger', recevoirDanger);
   setInterval(majVoisins, 5000);
   setTimeout(majVoisins);
 }
@@ -1505,4 +1693,14 @@ function coach() {
     const b = document.createElement('button'); b.className = 'btn petit' + (i === 0 ? ' primaire' : ''); b.textContent = t; b.onclick = fn; box.append(b);
   });
   if (['nuit', 'bat', 'loin'].includes(id) && !coach.vu?.has(id)) { (coach.vu ??= new Set()).add(id); navigator.vibrate?.([200, 100, 200]); }
+}
+
+// ---------- Premier lancement : avertissement de sécurité, âge et conditions (une fois) ----------
+if (S.averti !== '2026-11-19') {
+  popup(`<div class="k">Avant de commencer</div><h2>Repère t'aide, il ne te sauve pas</h2>
+    <p><b>En danger, appelle le 112.</b> Repère ne prévient pas les secours à ta place. Les refuges, dangers, itinéraires, la météo et les réponses de l'IA peuvent être faux ou anciens : vérifie sur place et garde une carte et une boussole.</p>
+    <p>Utilisation seul à partir de 15 ans ; avant, avec l'accord d'un parent. Ne touche pas ton téléphone en conduisant.</p>
+    <p class="note">En continuant, tu acceptes les <a href="legal.html#cgu" target="_blank" rel="noopener">conditions d'utilisation</a>. Tes données restent dans ton téléphone : <a href="legal.html#confidentialite" target="_blank" rel="noopener">confidentialité</a>.</p>
+    <button class="btn primaire large" id="btnAverti">J'ai compris</button>`);
+  $('#btnAverti').onclick = () => { S.averti = '2026-11-19'; save(); modal.close(); };
 }

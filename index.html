@@ -100,9 +100,12 @@
   </div>
 
   <div class="carte">
-    <div class="k">Autour de toi</div>
+    <div class="row"><div class="k" id="radarTitre">Autour de toi</div><button class="chip" id="btnDevant" aria-pressed="false">Devant moi</button></div>
     <div id="radarWrap" class="radar-wrap"><svg id="radar" viewBox="-110 -110 220 220"></svg></div>
+    <div class="meta devant-info" id="devantInfo" hidden></div>
     <ul class="proches" id="proches"></ul>
+    <ul class="proches" id="devantListe" hidden></ul>
+    <button class="btn petit" id="btnDanger" style="margin-top:10px">⚠ Signaler un danger ici</button>
   </div>
 
   <div class="grille2">
@@ -124,6 +127,8 @@
     <div id="plan"></div>
     <div class="nav-bandeau" id="navBandeau" hidden>
       <div><b id="navConsigne"></b><small id="navDist"></small></div>
+      <button id="navDanger" aria-label="Signaler un danger ici">⚠</button>
+      <button id="navVoix" aria-label="Couper la voix">🔊</button>
       <button id="navStop" aria-label="Arrêter le guidage">✕</button>
     </div>
     <div class="plan-bas">
@@ -149,9 +154,9 @@
   </div>
   <div class="carte" id="allerA">
     <div class="k">Aller à</div>
-    <div class="ask"><input id="dest" class="loupe" type="search" list="destListe" placeholder="Ville, village… ou touche la carte" autocomplete="off"><button class="btn primaire" id="btnIti">Y aller</button></div>
-    <datalist id="destListe"></datalist>
-    <div class="chips recents" id="recents"></div>
+    <div class="ask"><div class="dest-champ"><input id="dest" class="loupe" type="text" enterkeyhint="go" placeholder="Ville, village… ou touche la carte" autocomplete="off">
+      <button class="dest-hist" id="destHist" aria-label="Mes trajets" aria-expanded="false"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 5 5 5-5"/></svg></button>
+      <ul class="dest-menu" id="destMenu" hidden></ul></div><button class="btn primaire" id="btnIti">Y aller</button></div>
     <div class="chips" id="modes"><button class="chip" data-mode="car">En voiture</button><button class="chip" data-mode="foot">À pied</button><button class="chip" data-mode="bike">À vélo</button></div>
     <div id="itiRes" class="meta">Choisis une destination. L'itinéraire se calcule avec du réseau, puis reste dans le téléphone.</div>
     <button class="btn large" id="btnItiBoussole" hidden style="margin-top:12px">Suivre à la boussole (sans réseau)</button>
@@ -292,6 +297,14 @@
   </div>
 
   <div class="carte row">
+    <div><b>Voix du guidage</b><div class="meta">Annonce les directions à voix haute pendant « Y aller »</div></div>
+    <button class="switch" id="btnVoixGps" aria-pressed="true"></button>
+  </div>
+  <div class="carte row">
+    <div><b>Alerte des dangers</b><div class="meta">Sonnerie en approchant d'un arbre tombé, d'un trou, d'un obstacle… signalé par toi ou ton groupe</div></div>
+    <button class="switch" id="btnAlerteDanger" aria-pressed="true"></button>
+  </div>
+  <div class="carte row">
     <div><b>Style Studio</b><div class="meta">Sombre, épuré, animé, façon logiciel de création</div></div>
     <button class="switch" id="btnStudio" aria-pressed="false"></button>
   </div>
@@ -299,9 +312,10 @@
     <div><b>Mode nuit rouge</b><div class="meta">Tout l'écran en rouge, pour ne pas t'éblouir</div></div>
     <button class="switch" id="btnRouge" aria-pressed="false"></button>
   </div>
-  <p class="credits">Données : communes © État français (geo.api.gouv.fr) · refuges et points d'eau © refuges.info (CC BY-SA) · hôpitaux © contributeurs OpenStreetMap (ODbL) · Repère ne remplace pas les secours ni une formation.<br><span id="version"></span></p>
+  <p class="credits">Données : communes © État français (geo.api.gouv.fr) · refuges et points d'eau © refuges.info (CC BY-SA) · hôpitaux © contributeurs OpenStreetMap (ODbL) · Repère ne remplace pas les secours ni une formation.<br><a href="legal.html" target="_blank" rel="noopener">Mentions légales · conditions · confidentialité · licences</a><br><span id="version"></span></p>
 </section>
 </main>
+<div class="alerte-danger" id="alerteDanger" role="alert" hidden></div>
 
 <nav class="tabs">
   <button data-vue="situation" class="active"><svg><use href="#i-pos"/></svg>Situation</button>
