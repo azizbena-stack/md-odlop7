@@ -160,11 +160,6 @@
     <button class="btn petit" id="btnDanger" style="margin-top:10px"><svg class="ic"><use href="#i-danger"/></svg> Signaler un danger ici</button>
   </div>
 
-  <div class="grille2">
-    <button class="tuile" id="btnBivouac"><b>Où je dors,<br>c'est sûr ?</b><span>Analyse du bivouac</span></button>
-    <button class="tuile" id="btnPerdu"><b>Je suis<br>perdu</b><span>Étapes guidées</span></button>
-  </div>
-
   <div class="carte" id="risquesCarte" hidden>
     <div class="k">Dans ce secteur</div>
     <ul class="liste" id="risques"></ul>
@@ -308,6 +303,10 @@
 <!-- GUIDE -->
 <section id="v-guide" class="vue">
   <h1 class="titre">Guide</h1>
+  <div class="grille2">
+    <button class="tuile" id="btnBivouac"><b>Où je dors,<br>c'est sûr ?</b><span>Analyse du bivouac</span></button>
+    <button class="tuile" id="btnPerdu"><b>Je suis<br>perdu</b><span>Étapes guidées</span></button>
+  </div>
   <div id="reponse" class="reponse fil" hidden></div>
   <div class="ask">
     <input id="question" type="search" enterkeyhint="send" placeholder="Pose ta question… ex : je me suis coupé" autocomplete="off">
