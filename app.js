@@ -279,8 +279,9 @@ const duree = ms => { const m = Math.round(ms / 60e3); return m < 60 ? `${m} min
 majSoleil(); setInterval(majSoleil, 60e3);
 
 // ---------- Météo (téléchargée quand il y a du réseau, lisible hors ligne) ----------
-const WMO = c => c == null ? ['', '—'] : c === 0 ? [pic('soleil'), 'Ciel clair'] : c <= 2 ? [pic('eclaircie'), 'Peu nuageux'] : c === 3 ? [pic('nuage'), 'Couvert'] : c <= 48 ? [pic('brouillard'), 'Brouillard']
-  : c <= 57 ? [pic('pluie'), 'Bruine'] : c <= 67 ? [pic('pluie'), 'Pluie'] : c <= 77 ? [pic('neige'), 'Neige'] : c <= 82 ? [pic('pluie'), 'Averses'] : c <= 86 ? [pic('neige'), 'Averses de neige'] : [pic('orage'), 'Orage'];
+const picMeteo = nom => pic(nom, 'meteo-ic meteo-ic-' + nom);
+const WMO = c => c == null ? ['', '—'] : c === 0 ? [picMeteo('soleil'), 'Ciel clair'] : c <= 2 ? [picMeteo('eclaircie'), 'Peu nuageux'] : c === 3 ? [picMeteo('nuage'), 'Couvert'] : c <= 48 ? [picMeteo('brouillard'), 'Brouillard']
+  : c <= 57 ? [picMeteo('pluie'), 'Bruine'] : c <= 67 ? [picMeteo('pluie'), 'Pluie'] : c <= 77 ? [picMeteo('neige'), 'Neige'] : c <= 82 ? [picMeteo('pluie'), 'Averses'] : c <= 86 ? [picMeteo('neige'), 'Averses de neige'] : [picMeteo('orage'), 'Orage'];
 const beaufort = kn => [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64].findIndex(s => kn < s) === -1 ? 12 : [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64].findIndex(s => kn < s);
 let meteoEnCours = false;
 
@@ -333,10 +334,10 @@ function afficherMeteo() {
   $('#meteoCarte').className = 'carte meteo ' + (c >= 95 ? 'orage' : nuit ? 'nuit' : c >= 3 ? 'gris' : 'jour');
   const tend = h.pressure_msl[Math.min(i + 6, h.pressure_msl.length - 1)] - h.pressure_msl[i];
   const chips = [
-    t('Vent {v} nd du {c} · force {f}', { v: Math.round(vent), c: cardinal(h.wind_direction_10m[i]), f: beaufort(vent) }),
-    t('Rafales {n} nd', { n: Math.round(h.wind_gusts_10m[i]) }),
+    picMeteo('vent') + t('Vent {v} nd du {c} · force {f}', { v: Math.round(vent), c: cardinal(h.wind_direction_10m[i]), f: beaufort(vent) }),
+    picMeteo('vent') + t('Rafales {n} nd', { n: Math.round(h.wind_gusts_10m[i]) }),
     `${Math.round(h.pressure_msl[i])} hPa ${tend > 1 ? '↗' : tend < -1 ? '↘' : '→'}`,
-    t('Pluie {n} %', { n: h.precipitation_probability[i] ?? 0 }),
+    picMeteo('pluie') + t('Pluie {n} %', { n: h.precipitation_probability[i] ?? 0 }),
   ];
   if (M.m) {
     const j = M.m.time.indexOf(h.time[i]);
@@ -347,7 +348,14 @@ function afficherMeteo() {
   const al = alertesMeteo(M, i);
   $('#meteoAlerte').innerHTML = al.map(x => `<div class="meteo-alerte">${x}</div>`).join('');
   const d = M.d;
-  $('#meteoJours').innerHTML = d.time.map((jr, k) => `<div><b>${k === 0 ? t('auj.') : new Date(jr + 'T12:00').toLocaleDateString(LOC, { weekday: 'short' })}</b><i>${WMO(d.weather_code[k])[0]}</i>${Math.round(d.temperature_2m_max[k])}° / ${Math.round(d.temperature_2m_min[k])}°<br>${Math.round(d.wind_speed_10m_max[k])} ${t('nd')}</div>`).join('');
+  $('#meteoJours').innerHTML = d.time.map((jr, k) => {
+    const jour = k === 0 ? t('auj.') : new Date(jr + 'T12:00').toLocaleDateString(LOC, { weekday: 'short' });
+    const [icoJour, condition] = WMO(d.weather_code[k]);
+    const icone = icoJour ? `<span role="img" aria-label="${esc(t(condition))}">${icoJour}</span>` : '';
+    return `<div><b>${jour}</b><i>${icone}</i>
+      ${Math.round(d.temperature_2m_max[k])}° / ${Math.round(d.temperature_2m_min[k])}°<br>
+      <span class="meteo-vitesse">${Math.round(d.wind_speed_10m_max[k])} ${t('nd')}</span></div>`;
+  }).join('');
   $('#merBft').textContent = beaufort(vent);
 }
 afficherMeteo(); setInterval(afficherMeteo, 10 * 60e3);
