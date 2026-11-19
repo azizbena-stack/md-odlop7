@@ -2286,7 +2286,7 @@ function coach() {
 // ---------- Premier lancement : avertissement de sécurité, âge et conditions (une fois) ----------
 // Page d'accueil à chaque ouverture (demande d'Aziz) : choix de la langue, avertissement, conditions
 {
-  popup(`<div class="chips langues" style="margin-bottom:14px">${[['fr', 'Français'], ['en', 'English'], ['es', 'Español']].map(([l, n]) => `<button class="chip${l === LANGUE ? ' on' : ''}" data-l="${l}">${n}</button>`).join('')}</div><div class="k">Avant de commencer</div><h2>T’es où ? t'aide, il ne te sauve pas</h2>
+  popup(`<div class="chips langues" style="margin-bottom:14px">${[['fr', 'Français'], ['en', 'English'], ['es', 'Español']].map(([l, n]) => `<button class="chip${l === LANGUE ? ' on' : ''}" data-l="${l}">${n}</button>`).join('')}</div><div class="k">Avant de commencer</div><h2>L'application. T'es ou ? Mais ne te sauve PAS</h2>
     <p><b>En danger, appelle le 112.</b> T’es où ? ne prévient pas les secours à ta place. Les refuges, dangers, itinéraires, la météo et les réponses de l'IA peuvent être faux ou anciens : vérifie sur place et garde une carte et une boussole.</p>
     <p>Utilisation seul à partir de 15 ans ; avant, avec l'accord d'un parent. Ne touche pas ton téléphone en conduisant.</p>
     <p class="note">En continuant, tu acceptes les <a href="legal.html#cgu" target="_blank" rel="noopener">conditions d'utilisation</a>. Tes données restent dans ton téléphone : <a href="legal.html#confidentialite" target="_blank" rel="noopener">confidentialité</a>.</p>
