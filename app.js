@@ -20,7 +20,7 @@ const LANGUES = ['fr', 'en', 'es'], nav2 = (navigator.language || 'en').slice(0,
 const LANGUE = LANGUES.includes(S.langue) ? S.langue : LANGUES.includes(nav2) ? nav2 : 'en';
 const LOC = { fr: 'fr-FR', en: 'en-GB', es: 'es-ES' }[LANGUE], D = DICT[LANGUE] || {};
 const t = (fr, v = {}) => (D[fr] ?? fr).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
-CARDINAUX.splice(0, 8, ...CARDS[LANGUE]); FMT.dec = LANGUE === 'en' ? '.' : ',';
+CARDINAUX.splice(0, 8, ...CARDS[LANGUE]); FMT.dec = LANGUE === 'en' ? '.' : ','; FMT.imperial = S.unites === 'imperial';
 document.documentElement.lang = LANGUE;
 // Textes fixes de la page et des fenêtres : traduits à l'affichage (texte exact, espaces ignorés)
 const cleT = x => x.replace(/\s+/g, ' ').trim();
@@ -57,13 +57,19 @@ addEventListener('online', majReseau); addEventListener('offline', majReseau); m
 
 // ---------- Navigation ----------
 function ouvrir(vue) {
-  if (vue !== 'carte') { $('.plan-wrap')?.classList.remove('plein'); $('#btnPlein') && ($('#btnPlein').textContent = '⤢'); }
-  else if (guidage) { $('.plan-wrap').classList.add('plein'); setTimeout(() => { plan?.resize(); majGestes(); }); } // guidage en cours : on revient en plein écran
+  if (vue !== 'carte') {
+    fermerChoixIti();
+    pleinEcranCarte(false);
+  }
   $$('.vue').forEach(v => v.classList.toggle('active', v.id === 'v-' + vue));
   $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.vue === vue || (b.dataset.vue === 'carte' && vue === 'boussole')));
   $$('[data-seg]').forEach(b => b.classList.toggle('on', b.dataset.seg === vue));
   scrollTo({ top: 0 });
-  if (vue === 'carte') setTimeout(initPlan); // la carte a besoin d'un conteneur visible
+  if (vue === 'carte') {
+    if (guidage) pleinEcranCarte(true);
+    setTimeout(initPlan);
+  }
+  majVerrouillage(); // la carte a besoin d'un conteneur visible
   if (document.documentElement.classList.contains('survie')) coach();
 }
 $$('.tabs button').forEach(b => b.onclick = () => ouvrir(b.dataset.vue));
@@ -88,7 +94,14 @@ function demarrerGps() {
   $('#posMeta').textContent = 'Recherche des satellites…';
   if (watchId != null) navigator.geolocation.clearWatch(watchId);
   watchId = navigator.geolocation.watchPosition(onPos, e => {
-    if (e.code === 1) { navigator.geolocation.clearWatch(watchId); watchId = null; guidageEnAttente = false; }
+    if (e.code === 1) {
+      navigator.geolocation.clearWatch(watchId); watchId = null;
+      if (guidageEnAttente) {
+        guidageEnAttente = false;
+        $('#itiGo').textContent = 'Activer le GPS';
+        afficherCalculCarte(t('Autorise la position dans ton navigateur pour démarrer le guidage.'));
+      }
+    }
     const ios = /iPhone|iPad/.test(navigator.userAgent);
     $('#posMeta').textContent = e.code !== 1 ? 'Signal GPS faible : va dans un endroit dégagé.'
       : ios ? 'Localisation refusée. Réglages › Confidentialité et sécurité › Service de localisation › Sites web Safari : « Lorsque l\'app est active ». Puis Réglages › Apps › Safari › Localisation : « Demander ». Ferme et rouvre T’es où ?'
@@ -115,7 +128,7 @@ function onPos(p) {
   meteoAuto();
   majMoiPlan();
   verifierDangers();
-  if (guidageEnAttente) { guidageEnAttente = false; $('#itiChoix').hidden = true; demarrerGuidage(); }
+  if (guidageEnAttente) { guidageEnAttente = false; demarrerGuidage(); }
 }
 
 // ---------- Situation ----------
@@ -476,6 +489,7 @@ function enregistrerTrace() {
   if (!last || distance([last[0], last[1]], here) > 15) { S.trace.push([+here[0].toFixed(6), +here[1].toFixed(6), Date.now()]); save(); majTrace(); }
 }
 function majTrace() {
+  majTraceCarte();
   const t = S.trace;
   let d = 0; for (let i = 1; i < t.length; i++) d += distance(t[i - 1], t[i]);
   $('#traceDist').textContent = fmtDist(d); $('#tracePts').textContent = t.length;
@@ -488,7 +502,6 @@ function majTrace() {
   $('#traceSvg').innerHTML = `<polyline points="${P.map(p => p.join(',')).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
     <circle cx="${P[0][0]}" cy="${P[0][1]}" r="5" fill="var(--ok)"/><circle cx="${P.at(-1)[0]}" cy="${P.at(-1)[1]}" r="6" fill="var(--accent)" stroke="var(--bg)" stroke-width="2"/>`;
 }
-majTrace();
 
 // ---------- Carte et itinéraire ----------
 // MapLibre + tuiles vectorielles OpenFreeMap (gratuites, sans clé) : vue du dessus (2D) ou 3D avec relief et bâtiments.
@@ -506,6 +519,44 @@ const MODES = { foot: ['routed-foot', t('à pied')], bike: ['routed-bike', t('à
 let plan = null, moiMk = null, destMk = null, ptsMk = [], suivre = true, en3D = false;
 let destination = S.route?.dest || null, modeIti = S.route?.mode || 'car'; // voiture par défaut, comme un GPS
 const lnglat = ([la, lo]) => [lo, la];
+const traceGeoJSON = () => ({ type: 'FeatureCollection', features: S.traceCarte && S.trace.length > 1
+  ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: S.trace.map(lnglat) } }] : [] });
+function majTraceCarte() {
+  plan?.getSource('trace-personnelle')?.setData(traceGeoJSON());
+}
+majTrace();
+const couchesLieux = ['poi_r1', 'poi_r7', 'poi_r20'];
+function majLieuxCarte() {
+  couchesLieux.forEach(id => {
+    if (plan?.getLayer(id)) plan.setLayoutProperty(id, 'visibility', S.lieuxCarte === false ? 'none' : 'visible');
+  });
+}
+let textesCarte = [];
+function majLangueCarte() {
+  const langue = S.langueCarte;
+  for (const { id, texte } of textesCarte) {
+    if (!plan?.getLayer(id) || !/"(?:name|name_en|name:latin)"/.test(JSON.stringify(texte))) continue;
+    const nomLocal = ['get', 'name'];
+    const traduction = langue === 'local' ? nomLocal
+      : ['coalesce', ['get', 'name:' + langue], ['get', 'name_' + langue], nomLocal];
+    plan.setLayoutProperty(id, 'text-field', langue ? ['coalesce', traduction, texte] : texte);
+  }
+}
+function majPoliceCarte() {
+  const facteur = S.tailleCarte || 1;
+  const agrandir = base => typeof base === 'number' ? base * facteur : ['*', base, facteur];
+  for (const { id, taille: base } of textesCarte) {
+    if (!plan?.getLayer(id)) continue;
+    let valeur = base;
+    if (facteur !== 1) {
+      if (Array.isArray(base) && (base[0] === 'interpolate' || base[0] === 'step')) {
+        const premier = base[0] === 'step' ? 2 : 4;
+        valeur = base.map((val, i) => i >= premier && (i - premier) % 2 === 0 ? agrandir(val) : val);
+      } else valeur = agrandir(base);
+    }
+    plan.setLayoutProperty(id, 'text-size', valeur);
+  }
+}
 // Itinéraires : le choisi en violet foncé, les autres en violet clair (cachés pendant le guidage)
 const geoRoute = R => ({ type: 'FeatureCollection', features: !R ? [] : (guidage || !R.alts ? [{ geo: R.geo, i: R.choix || 0 }] : R.alts.map((a, i) => ({ geo: a.geo, i })))
   .map(a => ({ type: 'Feature', properties: { i: a.i, sel: a.i === (R.choix || 0) }, geometry: { type: 'LineString', coordinates: a.geo.map(lnglat) } })) });
@@ -521,7 +572,7 @@ function initPlan() {
   try {
     plan = new maplibregl.Map({ container: 'plan', style: urlStyle(), center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 60, attributionControl: { compact: true },
       // Carte dans la page : un doigt fait défiler la page, deux doigts bougent la carte (en plein écran : un doigt suffit)
-      cooperativeGestures: true, locale: { 'CooperativeGesturesHandler.MobileHelpText': 'Deux doigts pour bouger la carte · un doigt pour faire défiler', 'CooperativeGesturesHandler.WindowsHelpText': 'Ctrl + molette pour zoomer', 'CooperativeGesturesHandler.MacHelpText': '⌘ + molette pour zoomer' } }); // 60° au plus : au-delà on voit le ciel en haut de l’écran (Aziz veut la carte sur tout l’écran)
+      cooperativeGestures: !$('.plan-wrap').classList.contains('plein'), locale: { 'CooperativeGesturesHandler.MobileHelpText': 'Deux doigts pour bouger la carte · un doigt pour faire défiler', 'CooperativeGesturesHandler.WindowsHelpText': 'Ctrl + molette pour zoomer', 'CooperativeGesturesHandler.MacHelpText': '⌘ + molette pour zoomer' } }); // 60° au plus : au-delà on voit le ciel en haut de l’écran (Aziz veut la carte sur tout l’écran)
   } catch {
     // Vu le 17/11 : Chrome met sur liste noire les cartes graphiques des vieux Mac (Iris Pro, GT 750M) ; Safari, lui, affiche la carte
     $('.plan-btns').hidden = true;
@@ -541,15 +592,27 @@ function initPlan() {
     if (nomStyle() === 'liberty') plan.getLayer('background') && plan.setPaintProperty('background', 'background-color', '#F4F2EE');
     if (nomStyle() === 'liberty') plan.getLayer('water') && plan.setPaintProperty('water', 'fill-color', '#9DCFF2');
     ['building', 'building-3d', 'poi_transit'].forEach(id => plan.getLayer(id) && plan.setLayoutProperty(id, 'visibility', 'none'));
-    ['poi_r1', 'poi_r7', 'poi_r20'].forEach(id => {
+    couchesLieux.forEach(id => {
       if (!plan.getLayer(id)) return;
-      plan.setFilter(id, ['all', plan.getFilter(id), ['match', ['get', 'class'], ['fuel', 'lodging', 'restaurant', 'fast_food', 'hospital'], true, false]]);
+      const filtre = ['match', ['get', 'class'], ['fuel', 'lodging', 'restaurant', 'fast_food', 'hospital'], true, false];
+      const existant = plan.getFilter(id);
+      plan.setFilter(id, existant ? ['all', existant, filtre] : filtre);
       plan.setLayerZoomRange(id, 13, 24); // ils sont peu nombreux : on peut les montrer plus tôt
     });
+    majLieuxCarte();
+    const couchesFond = plan.getStyle().layers;
+    textesCarte = couchesFond.filter(c => c.type === 'symbol' && c.layout?.['text-field'])
+      .map(c => ({ id: c.id, texte: c.layout['text-field'], taille: c.layout['text-size'] ?? 16 }));
+    const avantRoutes = plan.getLayer('aeroway_fill') ? 'aeroway_fill' : couchesFond.find(c => c.type === 'line' || c.type === 'symbol')?.id;
+    if (S.tailleCarte && S.tailleCarte !== 1) majPoliceCarte();
+    if (S.langueCarte) majLangueCarte();
     const src = { type: 'raster-dem', tiles: [DEM], encoding: 'terrarium', tileSize: 256, maxzoom: 12 };
     plan.addSource('dem', { ...src, attribution: 'Relief © Mapzen, AWS Terrain Tiles' });
     plan.addSource('dem-ombre', src); // MapLibre conseille une source à part pour l'ombrage
-    plan.addLayer({ id: 'ombrage', type: 'hillshade', source: 'dem-ombre', layout: { visibility: S.relief === false ? 'none' : 'visible' }, paint: { 'hillshade-exaggeration': .35 } }, 'aeroway_fill');
+    plan.addLayer({ id: 'ombrage', type: 'hillshade', source: 'dem-ombre', layout: { visibility: S.relief === false ? 'none' : 'visible' }, paint: { 'hillshade-exaggeration': .35 } }, avantRoutes);
+    plan.addSource('trace-personnelle', { type: 'geojson', data: traceGeoJSON() });
+    plan.addLayer({ id: 'trace-personnelle', type: 'line', source: 'trace-personnelle', layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#17A8AF', 'line-width': 4, 'line-dasharray': [2, 1] } });
     plan.addSource('route', { type: 'geojson', data: geoRoute(null) });
     const rond = { 'line-cap': 'round', 'line-join': 'round' }, largeur = (a, b) => ['interpolate', ['linear'], ['zoom'], 8, a, 16, b];
     plan.addLayer({ id: 'route-alt', type: 'line', source: 'route', filter: ['!=', ['get', 'sel'], true], layout: rond, paint: { 'line-color': '#C3A6F7', 'line-width': largeur(5, 10) } });
@@ -560,27 +623,50 @@ function initPlan() {
   });
   plan.on('error', e => console.warn('carte', e.error?.message)); // hors ligne : morceaux manquants, la carte reste utilisable
   plan.on('click', e => {
-    if (e.originalEvent.target.closest?.('.maplibregl-marker')) return;
-    const { x, y } = e.point, alt = plan.queryRenderedFeatures([[x - 10, y - 10], [x + 10, y + 10]], { layers: ['route-alt'] })[0];
+    if (guidage || e.originalEvent.target.closest?.('.maplibregl-marker')) return;
+    const { x, y } = e.point, alt = plan.getLayer('route-alt') && plan.queryRenderedFeatures([[x - 10, y - 10], [x + 10, y + 10]], { layers: ['route-alt'] })[0];
     if (alt) return choisirIti(alt.properties.i); // toucher un autre itinéraire le choisit, comme dans les GPS
     const ll = [e.lngLat.lat, e.lngLat.lng], [v] = COMMUNES.length ? nearest(COMMUNES, ll) : [];
     choisirDest(ll, v ? t('Près de {v}', { v: `${v.p[0]} (${v.p[4]})` }) : t('Point sur la carte'));
   });
   plan.on('dragstart', () => { suivre = false; });
   plan.on('moveend', majPointsPlan);
+  plan.on('resize', () => {
+    if (!$('.plan-wrap').classList.contains('plein')) return;
+    if (guidage && suivre) plan.setPadding(margeGuidage());
+    else if (S.route && !$('#itiChoix').hidden) cadrerRoute(S.route);
+  });
   majMoiPlan(); majPointsPlan(); majModes(); majRelief(); majZones();
 }
 $('#btnStyle').textContent = t(styleCarte()[1]);
-$('#btnStyle').onclick = () => {
-  S.styleCarte = STYLES[(STYLES.indexOf(styleCarte()) + 1) % STYLES.length][0]; save();
-  $('#btnStyle').textContent = t(styleCarte()[1]); plan?.setStyle?.(urlStyle());
-};
+function changerStyleCarte(style) {
+  S.styleCarte = style; save();
+  $('#btnStyle').textContent = t(styleCarte()[1]); plan?.setStyle(urlStyle());
+}
+$('#btnStyle').onclick = () => changerStyleCarte(STYLES[(STYLES.indexOf(styleCarte()) + 1) % STYLES.length][0]);
+function pleinEcranCarte(actif) {
+  const wrap = $('.plan-wrap'), bouton = $('#btnPlein');
+  if (wrap.classList.contains('plein') === actif) return;
+  wrap.classList.toggle('plein', actif);
+  document.documentElement.classList.toggle('carte-plein-ecran', actif);
+  bouton.textContent = actif ? '✕' : '⤢';
+  bouton.setAttribute('aria-label', t(actif ? 'Quitter le plein écran' : 'Carte en plein écran'));
+  bouton.setAttribute('aria-pressed', actif);
+  plan?.resize();
+  if (actif) plan?.cooperativeGestures.disable();
+  else plan?.cooperativeGestures.enable();
+}
 $('#btnPlein').onclick = () => {
-  const on = $('.plan-wrap').classList.toggle('plein');
-  $('#btnPlein').textContent = on ? '✕' : '⤢'; $('#btnPlein').setAttribute('aria-label', on ? 'Quitter le plein écran' : 'Carte en plein écran');
-  plan?.resize(); majGestes();
+  if (guidage) return;
+  const actif = !$('.plan-wrap').classList.contains('plein');
+  if (!actif) fermerChoixIti();
+  pleinEcranCarte(actif);
 };
-const majGestes = () => plan?.cooperativeGestures[$('.plan-wrap').classList.contains('plein') ? 'disable' : 'enable']();
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !document.querySelector('dialog[open]') && !guidage && $('.plan-wrap').classList.contains('plein')) {
+    $('#btnPlein').click();
+  }
+});
 $('#planSuite').onclick = () => $('#planSuite').nextElementSibling.scrollIntoView({ behavior: 'smooth', block: 'start' });
 // 2D = vue du dessus (à vol d'oiseau) ; 3D = carte inclinée avec le relief en volume et les bâtiments
 function vue3D(on) {
@@ -609,38 +695,58 @@ function majMoiPlan() {
 
 // ---------- Guidage façon GPS de voiture ----------
 // Flèche couchée sur la route, caméra inclinée qui suit avec la route vers le haut, prochaine consigne dans un bandeau.
+const heureTrajet = new Intl.DateTimeFormat(LOC, { hour: '2-digit', minute: '2-digit' });
+const dateTrajet = new Intl.DateTimeFormat(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+let departGuidage = null, resteGuidage = null;
+function majHoraires() {
+  const R = S.route;
+  $('#itiHoraires').hidden = !R || !Number.isFinite(R.t) || !$('#planCalcul').hidden;
+  if ($('#itiHoraires').hidden) return;
+  const maintenant = Date.now(), depart = new Date(departGuidage ?? maintenant);
+  const arrivee = new Date(maintenant + (resteGuidage ?? R.t) * 1000);
+  const formateur = depart.toDateString() === arrivee.toDateString() ? heureTrajet : dateTrajet;
+  for (const [el, date] of [[$('#itiDepart'), depart], [$('#itiArrivee'), arrivee]]) {
+    el.dateTime = date.toISOString();
+    const texte = formateur.format(date);
+    if (texte !== el.textContent) el.textContent = texte;
+  }
+}
+setInterval(majHoraires, 30000);
+
 let guidage = false, navMk = null, cumul = [], cumulPour = null, idxEtapes = [], dernierI = 0;
 // Caméra du guidage : inclinée, route vers le haut ; ensuite elle suit la flèche image par image (boucleNav)
+const margeGuidage = () => ({ top: Math.round(plan.getContainer().clientHeight * .45), bottom: 0, left: 0, right: 0 });
 function cadrerGuidage() {
   suivre = true;
   plan.easeTo({ center: lnglat(affiche?.ll || ici()), bearing: affiche?.cap ?? plan.getBearing(), pitch: 58, zoom: 17, duration: 800,
-    padding: { top: Math.round(plan.getContainer().clientHeight * .45), bottom: 0, left: 0, right: 0 } });
+    padding: margeGuidage() });
 }
 function demarrerGuidage() {
   initPlan();
-  if (!plan || !pos || !S.route?.geo?.length) return;
-  guidage = true; suivre = true; moiMk?.remove(); moiMk = null; anim = affiche = null;
+  if (!plan || !pos || !S.route?.geo?.length || guidage) return;
+  guidage = true; departGuidage = Date.now(); resteGuidage = null; suivre = true; moiMk?.remove(); moiMk = null; anim = affiche = null;
   const el = document.createElement('div'); el.className = 'plan-nav';
   el.innerHTML = '<svg viewBox="0 0 40 40"><path d="M20 3 L35 35 L20 27 L5 35Z"/></svg>';
   navMk = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(lnglat(ici())).addTo(plan);
   $('#navBandeau').hidden = false; $('#itiChoix').hidden = true; $('#btnPlein').hidden = true; // pendant le guidage : toujours plein écran, on arrête avec la croix du bandeau vert
-  if (!$('.plan-wrap').classList.contains('plein')) $('#btnPlein').click(); // plein écran, comme un GPS de voiture
+  pleinEcranCarte(true); afficherCalculCarte('');
   voixEtape = { depart: true }; horsRoute = false; dire(t('C\'est parti vers {n}.', { n: S.route.dest.nom }), true);
-  dessinerRoute(S.route, false); majGuidage(); cadrerGuidage();
+  dessinerRoute(S.route, false); majGuidage();
+  if (guidage) cadrerGuidage();
 }
 function arreterGuidage(msg) {
-  if (!msg) speechSynthesis?.cancel();
-  guidage = false; navMk?.remove(); navMk = null; anim = affiche = null; cancelAnimationFrame(rafNav); rafNav = 0;
+  if (!msg) stopperVoix();
+  guidage = false; departGuidage = resteGuidage = null; navMk?.remove(); navMk = null; anim = affiche = null; cancelAnimationFrame(rafNav); rafNav = 0;
   $('#navBandeau').hidden = true; $('#btnPlein').hidden = false; if (S.route) dessinerRoute(S.route, false);
-  if ($('.plan-wrap').classList.contains('plein')) $('#btnPlein').click();
+  pleinEcranCarte(false);
   plan?.easeTo({ pitch: en3D ? 60 : 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 } });
-  majMoiPlan(); if (msg) $('#itiRes').textContent = msg;
+  majMoiPlan(); if (msg) { $('#itiRes').textContent = msg; afficherCalculCarte(msg); }
 }
 // Une fois par itinéraire : distances cumulées et place de chaque manœuvre sur le tracé
 // (avant, recalculé à chaque position GPS : très lourd sur un long trajet, d'où les saccades)
 function preparerRoute(R) {
-  if (R === cumulPour) return;
-  cumulPour = R; dernierI = 0; cumul = [0];
+  if (R.geo === cumulPour) return;
+  cumulPour = R.geo; dernierI = 0; cumul = [0];
   for (let i = 1; i < R.geo.length; i++) cumul.push(cumul[i - 1] + distance(R.geo[i - 1], R.geo[i]));
   let k = 0;
   idxEtapes = (R.etapes || []).filter(e => e[2]).map(e => {
@@ -661,23 +767,29 @@ function suiviRoute(R, me) {
   const n = R.geo.length; let i0 = 0, dmin = Infinity;
   const scan = (a, b) => { for (let i = Math.max(0, a); i < Math.min(n, b); i++) { const d = distance(me, R.geo[i]); if (d < dmin) { dmin = d; i0 = i; } } };
   scan(dernierI - 50, dernierI + 400); if (dmin > 150) scan(0, n); dernierI = i0;
-  let proj = R.geo[i0];
-  for (const j of [i0 - 1, i0]) if (j >= 0 && j + 1 < n) { const p = projeter(me, R.geo[j], R.geo[j + 1]); if (distance(me, p) < distance(me, proj)) proj = p; }
-  let j = i0, l = 0; while (j < n - 1 && l < 30) { l += distance(R.geo[j], R.geo[j + 1]); j++; }
-  return { i0, dmin: distance(me, proj), proj, cap: bearing(proj, R.geo[j === i0 ? Math.min(j + 1, n - 1) : j]) };
+  let proj = R.geo[i0], progression = cumul[i0];
+  for (const j of [i0 - 1, i0]) {
+    if (j < 0 || j + 1 >= n) continue;
+    const p = projeter(me, R.geo[j], R.geo[j + 1]), d = distance(me, p);
+    if (d < dmin) { dmin = d; proj = p; progression = cumul[j] + distance(R.geo[j], p); }
+  }
+  let j = i0; while (j < n - 1 && cumul[j] < progression + 30) j++;
+  return { dmin, proj, progression, cap: bearing(proj, R.geo[j]) };
 }
 function majGuidage() {
   const R = S.route, me = ici(); if (!R || !navMk) return;
   preparerRoute(R);
-  const { i0, dmin, proj, cap: capRoute } = suiviRoute(R, me);
+  const { progression, dmin, proj, cap: capRoute } = suiviRoute(R, me);
   // En roulant, le cap du GPS est plus fiable ; à pied ou à l'arrêt, la direction de la route
   const v = pos.coords.speed, cap = v > 2 && pos.coords.heading != null && !isNaN(pos.coords.heading) ? pos.coords.heading : capRoute;
   // Sur la route, la flèche est posée sur le tracé (comme un GPS de voiture) : elle ne tremble plus à côté
   allerVers(dmin < 25 ? proj : me, cap);
-  if (distance(me, R.dest.ll) < 30) { const a = t('Tu es arrivé : {n}.', { n: R.dest.nom }); dire(a); return arreterGuidage(a); }
-  const fin = cumul[cumul.length - 1] - cumul[i0] + dmin;
-  const prochaine = idxEtapes.find(e => e.i > i0);
-  const dEtape = prochaine ? cumul[prochaine.i] - cumul[i0] + dmin : fin;
+  if (distance(me, R.dest.ll) < 30) { const a = t('Tu es arrivé : {n}.', { n: R.dest.nom }); dire(a, true); return arreterGuidage(a); }
+  const total = cumul.at(-1), fin = Math.max(0, total - progression) + dmin;
+  resteGuidage = total ? R.t * Math.min(1, Math.max(0, fin / total)) : R.t;
+  majHoraires();
+  const prochaine = idxEtapes.find(e => cumul[e.i] > progression + 2);
+  const dEtape = prochaine ? cumul[prochaine.i] - progression + dmin : fin;
   $('#navConsigne').textContent = dmin > 60 ? 'Tu t\'écartes de l\'itinéraire : rejoins la ligne violette' : prochaine ? prochaine.t : 'Tout droit jusqu\'à l\'arrivée';
   $('#navDist').textContent = t('Dans {d} · arrivée à {f}', { d: fmtDist(dEtape), f: fmtDist(fin) });
   annoncer(prochaine, dEtape, dmin);
@@ -686,14 +798,17 @@ function majGuidage() {
 let voixEtape = {}, horsRoute = false;
 const minuscule = t => t[0].toLowerCase() + t.slice(1);
 function annoncer(prochaine, dEtape, dmin) {
-  if (dmin > 60) { if (!horsRoute) dire('Tu t\'écartes de l\'itinéraire. Rejoins la ligne violette.'); horsRoute = true; return; }
+  if (dmin > 60) { instructionAttente = null; if (!horsRoute) dire('Tu t\'écartes de l\'itinéraire. Rejoins la ligne violette.'); horsRoute = true; return; }
   horsRoute = false;
   if (!prochaine) return;
   const vite = (pos.coords.speed || 0) > 8, proche = vite ? 200 : 40, loin = vite ? 1500 : 300;
-  if (voixEtape.i !== prochaine.i) voixEtape = { i: prochaine.i };
-  if (prochaine.t === t('Tu es arrivé') || prochaine.t === 'Tu es arrivé') { if (!voixEtape.loin && dEtape <= loin) { voixEtape.loin = true; dire(t('Arrivée dans {d}.', { d: parleDist(dEtape) })); } return; } // « Tu es arrivé » est dit une seule fois, à l'arrivée
-  if (!voixEtape.proche && dEtape <= proche) { voixEtape.proche = voixEtape.loin = true; dire(prochaine.t); }
-  else if (!voixEtape.loin && (dEtape <= loin || voixEtape.depart)) { voixEtape.loin = true; dire(t('Dans {d}, {c}.', { d: parleDist(dEtape), c: minuscule(prochaine.t) })); }
+  if (voixEtape.i !== prochaine.i) {
+    instructionAttente = null;
+    voixEtape = { i: prochaine.i };
+  }
+  if (prochaine.t === t('Tu es arrivé') || prochaine.t === 'Tu es arrivé') { if (!voixEtape.loin && dEtape <= loin) { voixEtape.loin = true; dire(t('Arrivée dans {d}.', { d: parleDist(dEtape) }), false, true); } return; } // « Tu es arrivé » est dit une seule fois, à l'arrivée
+  if (!voixEtape.proche && dEtape <= proche) { voixEtape.proche = voixEtape.loin = true; dire(prochaine.t, false, true); }
+  else if (!voixEtape.loin && (dEtape <= loin || voixEtape.depart)) { voixEtape.loin = true; dire(t('Dans {d}, {c}.', { d: parleDist(dEtape), c: minuscule(prochaine.t) }), false, true); }
 }
 // Flèche continue : entre deux positions GPS (environ 1 par seconde), elle glisse et tourne image par image,
 // et la caméra la suit au même rythme (plus de sauts)
@@ -714,7 +829,7 @@ function boucleNav(t) {
   if (k < 1) rafNav = requestAnimationFrame(boucleNav);
 }
 $('#navStop').onclick = () => arreterGuidage();
-$('#navVoix').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (!S.voix) speechSynthesis?.cancel(); else dire('Voix activée.'); };
+$('#navVoix').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (!S.voix) stopperVoix(); else dire('Voix activée.'); };
 $('#navDanger').onclick = () => signalerDanger();
 
 // Refuges, points d'eau, hôpitaux… et mes points, quand on zoome assez
@@ -722,10 +837,10 @@ function majPointsPlan() {
   if (!plan) return;
   ptsMk.forEach(m => m.remove()); ptsMk = [];
   const b = plan.getBounds();
-  S.points.forEach(p => ptsMk.push(marqueur([p.lat, p.lon], 'plan-mien').setPopup(new maplibregl.Popup({ offset: 10 }).setText(p.nom))));
+  if (S.pointsCarte !== false) S.points.forEach(p => ptsMk.push(marqueur([p.lat, p.lon], 'plan-mien').setPopup(new maplibregl.Popup({ offset: 10 }).setText(p.nom))));
   dangersActifs().forEach(d => ptsMk.push(marqueur([d.lat, d.lon], 'plan-pt plan-danger', SIGNALES[d.type][0]).setPopup(new maplibregl.Popup({ offset: 14 })
     .setHTML(`<b>${SIGNALES[d.type][1]}</b><br>${t('Signalé {q} il y a {d}', { q: d.moi ? t('par toi') : d.par ? t('par {n}', { n: esc(d.par) }) : t('par ton groupe'), d: depuis(Date.now() - d.t) })}<br><button class="btn petit" data-suppr-danger="${esc(d.id)}">Plus là : retirer</button>`))));
-  if (plan.getZoom() < 11) return;
+  if (plan.getZoom() < 11 || S.lieuxCarte === false) return;
   POINTS.filter(p => b.contains([p[3], p[2]])).slice(0, 300).forEach(p => {
     const [ico, lib] = TYPES[p[0]] || ['•', p[0]];
     ptsMk.push(marqueur([p[2], p[3]], 'plan-pt', ico)
@@ -1016,20 +1131,27 @@ async function itiHorsLigne(dep, arr, mode) {
   return { d: d + d0 + d1, t: g.get(n1) + (d0 + d1) / Math.min(vol, 5), via: t('carte téléchargée, sans réseau'), geo: [r5(dep), ...geo, r5(arr)], etapes, horsLigne: true };
 }
 
-let calcId = 0;
+function afficherCalculCarte(message) {
+  $('#planCalcul').textContent = message;
+  $('#planCalcul').hidden = !message;
+  majHoraires();
+}
+let calcId = 0, choixMasquePour = -1;
 async function calculerIti() {
   if (!destination) return;
   const id = ++calcId, dest = destination, mode = modeIti;
   const dep = pos ? ici() : plan ? [plan.getCenter().lat, plan.getCenter().lng] : null;
   if (!dep) return $('#itiRes').textContent = 'Position inconnue : active le GPS.';
   $('#itiRes').textContent = t('Calcul de l\'itinéraire {m} vers {d}…', { m: MODES[mode][1], d: dest.nom });
+  afficherCalculCarte($('#itiRes').textContent);
   $('#btnItiBoussole').hidden = false;
   // Sans réseau (ou serveur injoignable) : itinéraire calculé sur la carte téléchargée
   const sansReseau = async raison => {
     $('#itiRes').textContent = t('Pas de réseau : calcul sur la carte téléchargée…');
+    afficherCalculCarte($('#itiRes').textContent);
     try {
       const a = await itiHorsLigne(dep, dest.ll, mode); if (id !== calcId) return true;
-      S.route = { dest, mode, alts: [a], choix: 0, ...a }; noterTrajet(S.route); proposerItis(); dessinerRoute(S.route, true); return true;
+      S.route = { dest, mode, alts: [a], choix: 0, ...a }; noterTrajet(S.route); afficherCalculCarte(''); proposerItis(); dessinerRoute(S.route, true); return true;
     } catch (e) { if (id === calcId) console.warn('itinéraire hors ligne', e); return false; }
   };
   if (!navigator.onLine && await sansReseau()) return;
@@ -1053,7 +1175,7 @@ async function calculerIti() {
     });
     const alts = [enAlt(r0)];
     S.route = { dest, mode, alts, choix: 0, ...alts[0] };
-    noterTrajet(S.route); proposerItis(); dessinerRoute(S.route, true);
+    noterTrajet(S.route); afficherCalculCarte(''); proposerItis(); dessinerRoute(S.route, true);
     // Variantes à gauche / à droite, sans faire attendre le trajet principal
     const rv = await Promise.all([1, -1].map(k => lire([dep, cote(k), dest.ll]).catch(() => null)));
     if (id !== calcId || guidage || S.route?.alts !== alts) return;
@@ -1061,17 +1183,21 @@ async function calculerIti() {
     rv.filter(Boolean).map(enAlt).sort((a, b) => a.t - b.t)
       .forEach(a => { if (a.t < alts[0].t * 1.5 && alts.every(b => commun(a.geo, b.geo) < .8)) alts.push(a); });
     if (alts.length < 2) return;
-    save(); dessinerRoute(S.route, S.route.choix === 0); if (!$('#itiChoix').hidden) proposerItis();
+    const choixVisible = !$('#itiChoix').hidden;
+    if (choixVisible) proposerItis();
+    save(); dessinerRoute(S.route, choixVisible && S.route.choix === 0);
   } catch (e) {
     if (id !== calcId) return;
     if (navigator.onLine && e.name !== 'AbortError' && await sansReseau()) return; // réseau trop faible : on tente la carte gardée
     if (id !== calcId) return;
     const d = distance(dep, dest.ll), raison = e.name === 'TimeoutError' ? 'le serveur ne répond pas, retouche « Y aller »' : e.message;
+    afficherCalculCarte(navigator.onLine ? t('Itinéraire impossible ({r}).', { r: t(raison) }) : t('Trajet non couvert par la carte téléchargée.'));
     $('#itiRes').innerHTML = (navigator.onLine ? t('Itinéraire impossible ({r}).', { r: esc(t(raison)) }) : t('Pas de réseau, et la carte téléchargée ne couvre pas ce trajet (télécharge la zone dans l\'onglet Carte).'))
       + t(' {n} est à {d} à vol d\'oiseau, direction {c}. La boussole peut t\'y guider en ligne droite.', { n: esc(dest.nom), d: fmtDist(d), c: cardinal(bearing(dep, dest.ll)) });
   }
 }
 function dessinerRoute(R, cadrer) {
+  majHoraires();
   $('#itiRes').innerHTML = `<b>${esc(R.dest.nom)}</b> · ${fmtDist(R.d)} · ${duree(R.t * 1000)} ${MODES[R.mode][1]}`;
   $('#etapes').innerHTML = R.etapes.map(([t, d]) => `<li><span>${esc(t)}</span>${d ? `<small>${fmtDist(d)}</small>` : ''}</li>`).join('');
   $('#btnItiBoussole').hidden = false;
@@ -1079,11 +1205,20 @@ function dessinerRoute(R, cadrer) {
   plan.getSource('route').setData(geoRoute(R));
   destMk?.remove(); destMk = marqueurDest(R.dest.ll);
   majBulles(R);
-  if (cadrer) {
-    suivre = false; const b = new maplibregl.LngLatBounds(); (R.alts || [R]).forEach(a => a.geo.forEach(p => b.extend(lnglat(p))));
-    const bas = $('#itiChoix').hidden ? 40 : $('#itiChoix').offsetHeight + 50;
-    plan.fitBounds(b, { padding: { top: 50, bottom: Math.min(bas, plan.getContainer().clientHeight * .6), left: 30, right: 70 }, duration: 0 });
-  }
+  if (cadrer) cadrerRoute(R);
+}
+const cartePaysage = matchMedia('(orientation: landscape) and (max-height: 500px)');
+function cadrerRoute(R) {
+  const { clientHeight: hauteur, clientWidth: largeur } = plan.getContainer();
+  if (!hauteur || !largeur) return;
+  suivre = false;
+  const cadre = new maplibregl.LngLatBounds();
+  (R.alts || [R]).forEach(a => a.geo.forEach(p => cadre.extend(lnglat(p))));
+  const choix = $('#itiChoix'), lateral = cartePaysage.matches && $('.plan-wrap').classList.contains('plein') && !choix.hidden;
+  const haut = $('.plan-haut').offsetHeight + 28;
+  const bas = lateral ? $('.plan-btns').offsetHeight + 44 : $('.plan-bas').offsetHeight + 17;
+  const droite = lateral ? Math.min(choix.offsetWidth + 30, largeur * .6) : 24;
+  plan.fitBounds(cadre, { padding: { top: Math.min(haut, hauteur * .3), bottom: Math.min(bas, hauteur * .6), left: 24, right: droite }, duration: 0 });
 }
 // Bulles de durée posées sur chaque itinéraire, à l'endroit où il s'écarte le plus de l'autre
 let bulles = [];
@@ -1107,13 +1242,13 @@ function choisirIti(i) {
 }
 // Feuille du bas : les itinéraires (durée, distance, par où), puis « Y aller »
 function proposerItis() {
-  const R = S.route; if (!R?.alts) return;
+  const R = S.route; if (!R?.alts || calcId === choixMasquePour || !$('#v-carte').classList.contains('active')) return;
   const LIB = { foot: 'À pied', bike: 'À vélo', car: 'En voiture' };
   $('#itiListe').innerHTML = `<div class="chips iti-modes">${Object.keys(MODES).map(k => `<button class="chip${k === R.mode ? ' on' : ''}" data-mode2="${k}">${LIB[k]}</button>`).join('')}</div>` + R.alts.map((a, i) => `<button class="iti-option${i === R.choix ? ' on' : ''}" data-iti="${i}">
     <span><b>${duree(a.t * 1000)}</b><small>${a.via ? t('Via {v}', { v: esc(a.via) }) : MODES[R.mode][1]}${i === 0 && R.alts.length > 1 ? t(' · le plus rapide') : ''}</small></span><small>${fmtDist(a.d)}</small></button>`).join('');
   $('#itiGo').textContent = pos ? 'Y aller' : 'Activer le GPS';
   $('#itiChoix').hidden = false;
-  if (!$('.plan-wrap').classList.contains('plein')) $('#btnPlein').click();
+  pleinEcranCarte(true);
 }
 $('#itiListe').onclick = e => {
   const m = e.target.closest('[data-mode2]'); if (m) { modeIti = m.dataset.mode2; majModes(); return calculerIti(); }
@@ -1122,10 +1257,21 @@ $('#itiListe').onclick = e => {
 let guidageEnAttente = false;
 $('#itiGo').onclick = () => {
   debloquerSon(); // iPhone : la voix et les bips ne marchent qu'après un toucher
-  if (!pos) { guidageEnAttente = true; if (watchId == null) demarrerGps(); $('#itiGo').textContent = 'Recherche du GPS… le guidage partira tout seul'; return; }
-  $('#itiChoix').hidden = true; demarrerGuidage();
+  if (!pos) {
+    guidageEnAttente = true;
+    afficherCalculCarte('');
+    $('#itiGo').textContent = 'Recherche du GPS… le guidage partira tout seul';
+    if (watchId == null) demarrerGps();
+    return;
+  }
+  demarrerGuidage();
 };
-$('#itiFermer').onclick = () => { $('#itiChoix').hidden = true; };
+function fermerChoixIti() {
+  choixMasquePour = calcId;
+  $('#itiChoix').hidden = true;
+  guidageEnAttente = false;
+}
+$('#itiFermer').onclick = fermerChoixIti;
 // Sans réseau : la destination devient un point suivi par la flèche de la boussole
 $('#btnItiBoussole').onclick = () => {
   if (!destination) return;
@@ -1192,28 +1338,81 @@ $('#btnSifflet').onclick = () => {
 
 // ---------- Voix (synthèse vocale du téléphone, hors ligne sur iPhone et la plupart des Android) ----------
 S.voix ??= true; S.alerteDanger ??= true;
-function dire(t, urgent) {
-  t = D[t] ?? t; // phrases fixes (« Voix activée. »…) dites dans la langue choisie
-  if (!S.voix || !window.speechSynthesis) return;
-  if (urgent) speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(t), v = speechSynthesis.getVoices().find(v => v.lang.toLowerCase().startsWith(LANGUE));
-  u.lang = LOC; if (v) u.voice = v;
-  speechSynthesis.speak(u);
+let instructionAttente = null;
+const voixPourLangue = () => (window.speechSynthesis?.getVoices() || [])
+  .filter(v => v.lang.toLowerCase().split(/[-_]/)[0] === LANGUE);
+function voixGuidage() {
+  const voix = voixPourLangue(), exacte = v => v.lang.toLowerCase().replace('_', '-') === LOC.toLowerCase();
+  const amelioree = v => /enhanced|premium|améliorée|mejorada|natural/i.test(v.name);
+  return voix.find(v => v.voiceURI === S.voixChoisie?.[LANGUE])
+    || voix.find(v => exacte(v) && v.localService && amelioree(v))
+    || voix.find(v => exacte(v) && v.localService)
+    || voix.find(exacte) || voix.find(v => v.localService) || voix[0];
 }
-const parleDist = m => m < 1000 ? t('{n} mètres', { n: Math.max(10, Math.round(m / 10) * 10) }) : t('{n} kilomètres', { n: (m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', FMT.dec) });
+function majListeVoix() {
+  const el = $('#regVoixChoix');
+  el.replaceChildren(new Option(t('Voix automatique'), ''));
+  for (const v of voixPourLangue()) el.append(new Option(v.name + ' · ' + v.lang, v.voiceURI));
+  const choix = S.voixChoisie?.[LANGUE];
+  if (choix && [...el.options].some(o => o.value === choix)) el.value = choix;
+  el.disabled = !window.speechSynthesis;
+  $('#regDebit').disabled = $('#regVoixEcouter').disabled = el.disabled;
+}
+function stopperVoix() {
+  instructionAttente = null;
+  window.speechSynthesis?.cancel();
+}
+function reprendreInstruction() {
+  setTimeout(() => {
+    const synth = window.speechSynthesis;
+    if (!instructionAttente || !guidage || synth.speaking || synth.pending) return;
+    const instruction = instructionAttente;
+    instructionAttente = null;
+    dire(instruction, false, true);
+  }, 0);
+}
+function prononcer(texte) {
+  const synth = window.speechSynthesis;
+  if (!synth) return;
+  const voix = voixGuidage(), u = new SpeechSynthesisUtterance(texte);
+  u.lang = voix?.lang || LOC; if (voix) u.voice = voix;
+  u.rate = S.debitVoix || .95;
+  u.onend = u.onerror = reprendreInstruction;
+  synth.speak(u);
+}
+function dire(texte, urgent = false, navigation = false) {
+  const synth = window.speechSynthesis;
+  if (!S.voix || !synth) return;
+  if (urgent) stopperVoix();
+  const message = D[texte] ?? texte;
+  if (navigation && !urgent && (synth.speaking || synth.pending)) {
+    instructionAttente = message;
+    return;
+  }
+  prononcer(message);
+}
+const parleDist = m => {
+  const arrondi = n => n.toFixed(n < 10 ? 1 : 0).replace('.', FMT.dec);
+  if (FMT.imperial) return m < 321.8688 ? t('{n} pieds', { n: Math.max(20, Math.round(m / .3048 / 10) * 10) })
+    : t('{n} miles', { n: arrondi(m / 1609.344) });
+  return m < 1000 ? t('{n} mètres', { n: Math.max(10, Math.round(m / 10) * 10) }) : t('{n} kilomètres', { n: arrondi(m / 1000) });
+};
 function debloquerSon() {
   try { (ctx ??= new AudioContext()).resume(); } catch {}
-  if (S.voix && window.speechSynthesis && !debloquerSon.fait) { debloquerSon.fait = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
+  if (S.voix && window.speechSynthesis && !debloquerSon.fait) { debloquerSon.fait = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0;
+    u.onend = u.onerror = reprendreInstruction;
+    speechSynthesis.speak(u); }
 }
 addEventListener('pointerdown', debloquerSon, { once: true });
 function majVoix() {
   $('#navVoix').innerHTML = pic(S.voix ? 'son' : 'muet'); $('#navVoix').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix');
   $('#btnVoixPlan').innerHTML = pic(S.voix ? 'son' : 'muet'); $('#btnVoixPlan').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix'); $('#btnVoixPlan').classList.toggle('coupe', !S.voix);
+  $('#regVoix').checked = S.voix; $('#regDangers').checked = S.alerteDanger;
   $('#btnVoixGps').setAttribute('aria-pressed', S.voix); $('#btnAlerteDanger').setAttribute('aria-pressed', S.alerteDanger);
 }
 majVoix();
 $('#btnVoixPlan').onclick = () => $('#btnVoixGps').click();
-$('#btnVoixGps').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (S.voix) dire('Voix du guidage activée.'); else speechSynthesis?.cancel(); };
+$('#btnVoixGps').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (S.voix) dire('Voix du guidage activée.'); else stopperVoix(); };
 $('#btnAlerteDanger').onclick = () => { S.alerteDanger = !S.alerteDanger; save(); majVoix(); if (S.alerteDanger) sonnerieDanger(); };
 
 // ---------- Dangers signalés : arbre tombé, trou, obstacle… (par moi ou mon groupe), sonnerie en approchant ----------
@@ -1661,19 +1860,180 @@ $('#btnFond').onclick = () => {
 // Jour / nuit automatique, comme Waze : sombre du coucher au lever du soleil (à ta position, sinon centre de la France)
 const estNuit = () => { const s = sunTimes(new Date(), ...(pos ? ici() : [46.6, 2.4])), n = Date.now(); return !s.rise || n < s.rise || n > s.set; };
 if (S.theme) { delete S.theme; save(); } // l'ancien mode nuit rouge est retiré
+const themeSysteme = matchMedia('(prefers-color-scheme: dark)');
 const appliquerTheme = () => {
-  const nuit = estNuit(), avant = document.documentElement.dataset.theme;
+  const systeme = S.ambiance === 'systeme', nuit = systeme ? themeSysteme.matches : estNuit();
+  const avant = document.documentElement.dataset.theme;
   document.documentElement.dataset.theme = nuit ? 'nuit' : 'jour';
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', S.ambiance ? '#1C1C1E' : nuit ? '#000000' : '#DCE7F3');
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', S.ambiance && !systeme ? '#1C1C1E' : nuit ? '#000000' : '#DCE7F3');
   if (avant && avant !== document.documentElement.dataset.theme && styleCarte()[0] === 'auto') plan?.setStyle?.(urlStyle());
   // Styles Studio : même mise en page sombre, couleurs différentes (graphite = l'ancien interrupteur « Style Studio »)
   if (S.studio) { S.ambiance = 'graphite'; delete S.studio; save(); }
-  document.documentElement.classList.toggle('studio', !!S.ambiance); document.documentElement.dataset.ambiance = S.ambiance || '';
+  document.documentElement.classList.toggle('studio', !!S.ambiance && !systeme); document.documentElement.dataset.ambiance = S.ambiance || '';
   document.querySelectorAll('#ambiances [data-a]').forEach(b => b.classList.toggle('on', b.dataset.a === (S.ambiance || '')));
 };
-$('#ambiances').onclick = e => { const b = e.target.closest('[data-a]'); if (!b) return; S.ambiance = b.dataset.a; save(); appliquerTheme(); };
+function choisirAmbiance(ambiance) {
+  S.ambiance = ambiance; save(); appliquerTheme();
+}
+$('#ambiances').onclick = e => { const b = e.target.closest('[data-a]'); if (b) choisirAmbiance(b.dataset.a); };
+themeSysteme.addEventListener('change', appliquerTheme);
 setInterval(appliquerTheme, 60e3);
 appliquerTheme();
+
+// ---------- Réglages de la carte ----------
+const reglagesCarte = $('#reglagesCarte'), cartesHorsLigne = $('#cartesHorsLigne');
+const ancreCartesHorsLigne = document.createComment('Téléchargements de la carte');
+cartesHorsLigne.before(ancreCartesHorsLigne);
+$('#btnReglagesCarte').onclick = () => {
+  $('#regCartesHorsLigne').append(cartesHorsLigne);
+  $('#regStyle').value = styleCarte()[0];
+  $('#regLangue').value = LANGUE;
+  $('#regLangueCarte').value = S.langueCarte || '';
+  $('#regTheme').value = S.ambiance || '';
+  $('#regAccueil').value = S.accueil || 'situation';
+  $('#regPolice').value = String(S.tailleCarte || 1);
+  $('#regRelief').checked = S.relief !== false;
+  $('#regLieux').checked = S.lieuxCarte !== false;
+  $('#regTrace').checked = !!S.traceCarte;
+  $('#regPoints').checked = S.pointsCarte !== false;
+  $('#regVerrouillage').checked = S.verrouillageCarte !== false;
+  $('#regDebit').value = String(S.debitVoix || .95);
+  $('#regUnites').value = FMT.imperial ? 'imperial' : 'metrique';
+  majListeVoix();
+  majVoix();
+  reglagesCarte.showModal();
+  if ($('#regCache').open) majCacheCarte();
+};
+$('#fermerReglagesCarte').onclick = () => reglagesCarte.close();
+reglagesCarte.addEventListener('close', () => {
+  ancreCartesHorsLigne.after(cartesHorsLigne);
+  $('#btnReglagesCarte').focus({ preventScroll: true });
+});
+$('#regStyle').onchange = e => changerStyleCarte(e.target.value);
+$('#regLangue').onchange = e => { $('#langue').value = e.target.value; $('#langue').onchange(); };
+$('#regLangueCarte').onchange = e => { S.langueCarte = e.target.value; save(); majLangueCarte(); };
+$('#regTheme').onchange = e => choisirAmbiance(e.target.value);
+$('#regAccueil').onchange = e => { S.accueil = e.target.value; save(); };
+$('#regPolice').onchange = e => { S.tailleCarte = Number(e.target.value); save(); majPoliceCarte(); };
+$('#regRelief').onchange = () => $('#btnRelief').click();
+$('#regLieux').onchange = e => { S.lieuxCarte = e.target.checked; save(); majLieuxCarte(); majPointsPlan(); };
+$('#regTrace').onchange = e => { S.traceCarte = e.target.checked; save(); majTraceCarte(); };
+$('#regPoints').onchange = e => { S.pointsCarte = e.target.checked; save(); majPointsPlan(); };
+$('#regVerrouillage').onchange = e => { S.verrouillageCarte = e.target.checked; save(); majVerrouillage(); };
+$('#regVoix').onchange = () => $('#btnVoixGps').click();
+$('#regDangers').onchange = () => $('#btnAlerteDanger').click();
+$('#regVoixChoix').onchange = e => {
+  S.voixChoisie ??= {};
+  S.voixChoisie[LANGUE] = e.target.value;
+  save();
+};
+$('#regDebit').onchange = e => { S.debitVoix = Number(e.target.value); save(); };
+$('#regVoixEcouter').onclick = () => {
+  stopperVoix();
+  prononcer(t('Dans trois cents mètres, tourne à droite. Puis continue tout droit.'));
+};
+window.speechSynthesis?.addEventListener('voiceschanged', majListeVoix);
+$('#regUnites').onchange = e => {
+  S.unites = e.target.value; FMT.imperial = S.unites === 'imperial'; save();
+  majTrace(); majBoussole();
+  if (pos) majSituation();
+  if (S.route) dessinerRoute(S.route, false);
+  if (guidage) majGuidage();
+  if (!$('#itiChoix').hidden) proposerItis();
+};
+
+async function majCacheCarte(vide = false) {
+  const info = $('#regCacheInfo'), bouton = $('#regCacheVider');
+  bouton.disabled = true;
+  try {
+    if (vide) await caches.delete('repere-tuiles');
+    const cache = await caches.open('repere-tuiles'), n = (await cache.keys()).length;
+    info.textContent = t('{n} fichiers vus en naviguant. Tes zones téléchargées sont gardées à part.', { n });
+    bouton.disabled = !n;
+  } catch {
+    info.textContent = t('Cache indisponible dans ce navigateur.');
+  }
+}
+$('#regCache').addEventListener('toggle', () => { if ($('#regCache').open) majCacheCarte(); });
+$('#regCacheVider').onclick = () => majCacheCarte(true);
+
+let verrouCarte = null, demandeVerrou = false;
+async function majVerrouillage() {
+  const garder = () => S.verrouillageCarte === false && !document.hidden && $('#v-carte').classList.contains('active');
+  const info = $('#regVerrouillageInfo');
+  if (!navigator.wakeLock) {
+    $('#regVerrouillage').disabled = true;
+    info.textContent = t('Le navigateur gère le verrouillage de l’écran.');
+    return;
+  }
+  if (!garder()) {
+    info.textContent = '';
+    if (verrouCarte) {
+      const verrou = verrouCarte;
+      verrouCarte = null;
+      await verrou.release().catch(() => {});
+    }
+    return;
+  }
+  if (verrouCarte || demandeVerrou) return;
+  demandeVerrou = true;
+  try {
+    const verrou = await navigator.wakeLock.request('screen');
+    if (!garder()) { await verrou.release(); return; }
+    verrouCarte = verrou;
+    info.textContent = t('L’écran reste allumé tant que la carte est visible.');
+    verrou.addEventListener('release', () => {
+      if (verrouCarte !== verrou) return;
+      verrouCarte = null;
+      info.textContent = garder() ? t('Le verrouillage est de nouveau géré par le navigateur.') : '';
+    });
+  } catch {
+    info.textContent = t('Le navigateur gère le verrouillage de l’écran.');
+  } finally {
+    demandeVerrou = false;
+  }
+}
+document.addEventListener('visibilitychange', majVerrouillage);
+
+$('#regExporter').onclick = () => {
+  const contenu = JSON.stringify({ format: 'tes-ou-carte', version: 1, points: S.points, trace: S.trace }, null, 2);
+  const url = URL.createObjectURL(new Blob([contenu], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'tes-ou-points-et-parcours.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+$('#regImportBouton').onclick = () => $('#regImporter').click();
+$('#regImporter').onchange = async e => {
+  const input = e.target, f = input.files[0], info = $('#regImportInfo');
+  if (!f) return;
+  input.value = '';
+  try {
+    if (f.size > 10 * 1024 * 1024) throw new Error('taille');
+    const { format, version, points, trace } = JSON.parse(await f.text());
+    const coord = (lat, lon) => Number.isFinite(lat) && Math.abs(lat) <= 90 && Number.isFinite(lon) && Math.abs(lon) <= 180;
+    const dateValide = n => Number.isFinite(n) && n >= 0 && n <= 8.64e15;
+    const pointValide = p => p && typeof p.id === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(p.id) && typeof p.nom === 'string' &&
+      p.nom.length <= 1024 && coord(p.lat, p.lon) && dateValide(p.t);
+    const traceValide = p => Array.isArray(p) && p.length === 3 && coord(p[0], p[1]) && dateValide(p[2]);
+    if (format !== 'tes-ou-carte' || version !== 1 || !Array.isArray(points) || !Array.isArray(trace) ||
+        !points.every(pointValide) || !trace.every(traceValide)) throw new Error('format');
+    const ids = new Set(S.points.map(p => p.id)), releves = new Set(S.trace.map(p => p.join(',')));
+    for (const { id, nom, lat, lon, t } of points) {
+      if (!ids.has(id)) { ids.add(id); S.points.push({ id, nom, lat, lon, t }); }
+    }
+    const parcours = [];
+    for (const point of trace) {
+      const cle = point.join(',');
+      if (!releves.has(cle)) { releves.add(cle); parcours.push(point); }
+    }
+    if (parcours.length) S.trace = S.trace.concat(parcours).sort((a, b) => a[2] - b[2]);
+    save(); majPoints(); majPointsPlan(); majTrace();
+    info.textContent = t('Sauvegarde importée.');
+  } catch {
+    info.textContent = t('Fichier illisible ou format de sauvegarde incorrect.');
+  }
+};
+
 
 // ---------- T’es où ? à proximité : Bluetooth (application Android) ou réseau cellulaire (version web, iPhone) ----------
 // Par le réseau, les positions passent par le relais public ntfy.sh, chiffrées avec le code du groupe :
@@ -1939,3 +2299,5 @@ function coach() {
 // Choix de la langue (onglet Moi) : l'app se recharge dans la nouvelle langue
 $('#langue').value = LANGUE;
 $('#langue').onchange = () => { S.langue = $('#langue').value; save(); location.reload(); };
+
+if (S.accueil === 'carte') ouvrir('carte');

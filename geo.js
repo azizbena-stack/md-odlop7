@@ -30,6 +30,8 @@ export const FMT = { dec: ',' }; // séparateur décimal (« . » en anglais), r
 export const cardinal = deg => CARDINAUX[Math.round(deg / 45) % 8];
 
 export function fmtDist(m) {
+  if (FMT.imperial) return m < 321.8688 ? `${Math.round(m / .3048 / 10) * 10} ft`
+    : `${(m / 1609.344).toFixed(m < 16093.44 ? 1 : 0).replace('.', FMT.dec)} mi`;
   return m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', FMT.dec)} km`;
 }
 

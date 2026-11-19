@@ -76,6 +76,7 @@
   <symbol id="i-pousse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-8M12 13c0-4-3-6-7-6 0 4 3 6 7 6zM12 11c0-3 2-5 6-5 0 3-2 5-6 5z"/></symbol>
   <symbol id="i-valise" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M8 7v13M16 7v13"/></symbol>
   <symbol id="i-reseau" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-3M10 20v-7M15 20V9M20 20V4"/></symbol>
+<symbol id="i-reglages" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4l.5 2.4a7 7 0 0 1 1.5.9l2.3-.8 2 3.5-1.8 1.6a7 7 0 0 1 0 1.8l1.8 1.6-2 3.5-2.3-.8a7 7 0 0 1-1.5.9L14 20h-4l-.5-2.4a7 7 0 0 1-1.5-.9l-2.3.8-2-3.5 1.8-1.6a7 7 0 0 1 0-1.8L3.7 9l2-3.5 2.3.8a7 7 0 0 1 1.5-.9L10 3Z"/><circle cx="12" cy="11.5" r="2.8"/></symbol>
 </svg>
 
 <header class="top">
@@ -176,11 +177,22 @@
   <div class="segment"><button data-seg="carte">Carte</button><button data-seg="boussole">Boussole</button></div>
   <div class="plan-wrap">
     <div id="plan"></div>
-    <div class="nav-bandeau" id="navBandeau" hidden>
-      <div><b id="navConsigne"></b><small id="navDist"></small></div>
-      <button id="navDanger" aria-label="Signaler un danger ici"><svg class="ic"><use href="#i-danger"/></svg></button>
-      <button id="navVoix" aria-label="Couper la voix"><svg class="ic"><use href="#i-son"/></svg></button>
-      <button id="navStop" aria-label="Arrêter le guidage">✕</button>
+    <div class="plan-haut">
+      <div class="nav-bandeau" id="navBandeau" hidden>
+        <div><b id="navConsigne"></b><small id="navDist"></small></div>
+        <button id="navDanger" aria-label="Signaler un danger ici"><svg class="ic"><use href="#i-danger"/></svg></button>
+        <button id="navVoix" aria-label="Couper la voix"><svg class="ic"><use href="#i-son"/></svg></button>
+        <button id="navStop" aria-label="Arrêter le guidage">✕</button>
+      </div>
+      <dl class="iti-horaires" id="itiHoraires" hidden>
+        <div><dt>Départ</dt><dd><time id="itiDepart"></time></dd></div>
+        <div><dt>Arrivée estimée</dt><dd><time id="itiArrivee"></time></dd></div>
+      </dl>
+      <div class="plan-haut-actions">
+        <button id="btnReglagesCarte" class="plan-btn" aria-haspopup="dialog" aria-label="Réglages de la carte"><svg aria-hidden="true"><use href="#i-reglages"/></svg></button>
+        <button id="btnPlein" class="plan-btn" aria-label="Carte en plein écran" aria-pressed="false">⤢</button>
+      </div>
+      <p class="plan-calcul" id="planCalcul" role="status" hidden></p>
     </div>
     <div class="plan-bas">
       <div class="plan-btns">
@@ -189,7 +201,6 @@
         <button id="btn3D" class="plan-btn" aria-label="Vue en 3D">3D</button>
         <button id="btnRelief" class="plan-btn" aria-label="Ombrage du relief">Relief</button>
         <button id="btnCentrer" class="plan-btn" aria-label="Me recentrer"><svg><use href="#i-pos"/></svg></button>
-        <button id="btnPlein" class="plan-btn" aria-label="Carte en plein écran">⤢</button>
       </div>
       <div class="iti-choix" id="itiChoix" hidden>
         <div id="itiListe"></div>
@@ -198,7 +209,7 @@
     </div>
   </div>
   <button class="plan-suite" id="planSuite"><span>⌄</span> Chercher un lieu · télécharger la carte</button>
-  <div class="carte">
+  <div id="cartesHorsLigne" class="carte">
     <div class="k">Carte hors ligne</div>
     <p class="meta" id="zoneInfo">Cadre la zone de ta sortie sur la carte, puis télécharge-la : elle restera lisible sans réseau, en 2D comme en 3D.</p>
     <button class="btn large primaire" id="btnZone" style="margin-top:10px">Télécharger la zone affichée</button>
@@ -373,7 +384,7 @@
   <div class="carte">
     <b>Style de l'app</b><div class="meta">Auto : clair le jour, sombre la nuit (comme Waze), ou un style Studio</div>
     <div class="chips" id="ambiances" style="margin-top:10px">
-      <button class="chip" data-a="">Auto jour / nuit</button><button class="chip" data-a="graphite">Studio graphite</button><button class="chip" data-a="minuit">Studio minuit</button><button class="chip" data-a="foret">Studio forêt</button><button class="chip" data-a="prune">Studio prune</button>
+      <button class="chip" data-a="">Auto jour / nuit</button><button class="chip" data-a="systeme">Système</button><button class="chip" data-a="graphite">Studio graphite</button><button class="chip" data-a="minuit">Studio minuit</button><button class="chip" data-a="foret">Studio forêt</button><button class="chip" data-a="prune">Studio prune</button>
     </div>
   </div>
   <p class="credits">Données : communes © État français (geo.api.gouv.fr) · refuges et points d'eau © refuges.info (CC BY-SA) · hôpitaux © contributeurs OpenStreetMap (ODbL) · T’es où ? ne remplace pas les secours ni une formation.<br><a href="legal.html" target="_blank" rel="noopener">Mentions légales · conditions · confidentialité · licences</a><br><span id="version"></span></p>
@@ -391,6 +402,99 @@
 
 <div id="lum" class="lum" hidden><video id="lumVideo" playsinline muted autoplay hidden></video><div class="lum-txt" id="lumTxt"></div><div class="lum-info" id="lumInfo"></div><button id="lumStop">Appuie pour arrêter</button></div>
 <dialog id="modal"><button class="modal-x" id="modalX" aria-label="Fermer">✕</button><div id="modalBody"></div><button class="btn" id="modalFermer">Fermer</button></dialog>
+
+<dialog id="reglagesCarte" aria-labelledby="titreReglagesCarte">
+  <h2 id="titreReglagesCarte">Réglages de la carte</h2>
+  <button id="fermerReglagesCarte" class="modal-x" aria-label="Fermer" autofocus>✕</button>
+  <div class="reglages-corps">
+    <details>
+      <summary>Source de cartes</summary>
+      <p class="meta">OpenFreeMap · données OpenStreetMap</p>
+      <label>Style de la carte
+        <select id="regStyle"><option value="auto">Auto</option><option value="liberty">Clair</option><option value="positron">Doux</option><option value="dark">Sombre</option><option value="fiord">Nuit</option></select>
+      </label>
+    </details>
+    <details>
+      <summary>Télécharger les cartes</summary>
+      <div id="regCartesHorsLigne"></div>
+    </details>
+    <details>
+      <summary>Éléments de la carte</summary>
+      <label class="reglages-case"><input type="checkbox" id="regRelief"> Ombrage du relief</label>
+      <label class="reglages-case"><input type="checkbox" id="regLieux"> Points d’intérêt et lieux proches</label>
+    </details>
+    <details>
+      <summary>Police et langue</summary>
+      <label>Taille des noms sur la carte
+        <select id="regPolice"><option value="1">Standard</option><option value="1.2">Grande</option><option value="1.4">Très grande</option></select>
+      </label>
+      <label>Langue des noms sur la carte
+        <select id="regLangueCarte"><option value="">Par défaut</option><option value="local">Noms locaux</option><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
+      </label>
+      <label>Langue de l’application
+        <select id="regLangue"><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
+      </label>
+      <p class="meta">Changer la langue redémarre l’application.</p>
+    </details>
+    <details id="regCache">
+      <summary>Cache des cartes</summary>
+      <p class="meta" id="regCacheInfo" role="status"></p>
+      <button class="btn" id="regCacheVider">Vider le cache de navigation</button>
+    </details>
+    <details>
+      <summary>Thème</summary>
+      <label>Style de l'app
+        <select id="regTheme"><option value="">Auto jour / nuit</option><option value="systeme">Système</option><option value="graphite">Studio graphite</option><option value="minuit">Studio minuit</option><option value="foret">Studio forêt</option><option value="prune">Studio prune</option></select>
+      </label>
+    </details>
+    <details>
+      <summary>Écran principal</summary>
+      <label>Onglet au démarrage
+        <select id="regAccueil"><option value="situation">Situation</option><option value="carte">Carte</option></select>
+      </label>
+    </details>
+    <details>
+      <summary>Traces et marqueurs</summary>
+      <label class="reglages-case"><input type="checkbox" id="regTrace"> Afficher mon parcours enregistré</label>
+      <label class="reglages-case"><input type="checkbox" id="regPoints"> Afficher mes marqueurs</label>
+    </details>
+    <details>
+      <summary>Verrouillage automatique</summary>
+      <label class="reglages-case"><input type="checkbox" id="regVerrouillage"> Laisser l’écran se verrouiller sur la carte</label>
+      <p class="meta" id="regVerrouillageInfo" role="status"></p>
+    </details>
+    <details>
+      <summary>Navigation</summary>
+      <label class="reglages-case"><input type="checkbox" id="regVoix"> Voix du guidage</label>
+      <label>Voix
+        <select id="regVoixChoix"></select>
+      </label>
+      <label>Débit de la voix
+        <select id="regDebit"><option value="0.85">Plus lent</option><option value="0.95">Naturel</option><option value="1.08">Plus rapide</option></select>
+      </label>
+      <button class="btn" id="regVoixEcouter">Écouter la voix</button>
+      <label class="reglages-case"><input type="checkbox" id="regDangers"> Alerte des dangers</label>
+    </details>
+    <details>
+      <summary>Sauvegarde des données</summary>
+      <p class="meta">Tes points et ton parcours sont dans le fichier JSON.</p>
+      <div class="reglages-actions">
+        <button class="btn" id="regExporter">Exporter</button>
+        <button class="btn" id="regImportBouton">Importer</button>
+      </div>
+      <input id="regImporter" type="file" accept=".json,application/json" hidden>
+      <p class="meta" id="regImportInfo" role="status"></p>
+    </details>
+    <details>
+      <summary>Format des unités</summary>
+      <label>Distances terrestres
+        <select id="regUnites"><option value="metrique">Mètres et kilomètres</option><option value="imperial">Pieds et miles</option></select>
+      </label>
+    </details>
+    <a class="reglages-lien" href="legal.html#confidentialite" target="_blank" rel="noopener">Confidentialité</a>
+    <a class="reglages-lien" href="aide-carte.html" target="_blank" rel="noopener">Manuel d’utilisation en ligne</a>
+  </div>
+</dialog>
 
 <script src="vendor/maplibre-gl.js"></script>
 <script type="module" src="app.js"></script>

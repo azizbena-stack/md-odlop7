@@ -350,20 +350,40 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 /* En vue inclinée MapLibre ne dessine pas le haut de l'écran : on y voit ce fond, donc même couleur que le ciel (sinon bande sombre en thème Studio) */
 #plan.maplibregl-map { background: #DCEAF5; }
 .plan-wrap.plein { position: fixed; inset: 0; z-index: 40; border-radius: 0; margin: 0; border: 0 !important; }
-.plan-wrap.plein #plan { height: 100dvh; }
+html.carte-plein-ecran, html.carte-plein-ecran body { overflow: hidden; overscroll-behavior: none; }
+.carte-plein-ecran #v-carte, .carte-plein-ecran #v-carte > .plan-wrap { animation: none; }
+.carte-plein-ecran body > :is(.top, .tabs, #coach), .carte-plein-ecran #v-carte > :not(.plan-wrap) { visibility: hidden; }
+.plan-wrap.plein #plan { height: 100%; }
+.plan-haut { position: absolute; inset: 10px 10px auto; z-index: 501; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; pointer-events: none; }
+.plan-haut-actions { display: flex; gap: 6px; grid-column: 2; justify-self: end; }
+.plan-haut > * { pointer-events: auto; }
+.plan-calcul, .iti-horaires { grid-column: 1; justify-self: start; margin: 0; padding: 8px 10px; border-radius: 12px; color: var(--txt); background: var(--surface); box-shadow: var(--ombre); }
+.plan-calcul { font-size: 13px; grid-column: 1 / -1; overflow-wrap: anywhere; }
+.iti-horaires { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.iti-horaires dt { font-size: 12px; color: var(--txt2); }
+.iti-horaires dd { margin: 0; font-size: 15px; font-weight: 700; }
+.plan-wrap.plein .plan-haut { top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); right: calc(10px + env(safe-area-inset-right)); }
 .plan-btns { display: grid; gap: 8px; }
 /* Boutons et choix d'itinéraire en bas de la carte (au-dessus des crédits) */
 .plan-bas { position: absolute; left: 0; right: 0; bottom: 0; z-index: 500; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; padding: 10px 10px 30px; pointer-events: none; }
 .plan-bas > * { pointer-events: auto; }
-.plan-wrap.plein .plan-bas { padding-bottom: calc(30px + env(safe-area-inset-bottom)); }
-.iti-choix { align-self: stretch; background: #fff; color: #1C1C1E; border-radius: 22px; padding: 12px; box-shadow: 0 -4px 24px rgba(0, 0, 0, .22); }
+.plan-wrap.plein .plan-bas { max-height: calc(100% - 96px - env(safe-area-inset-top)); padding: 10px calc(10px + env(safe-area-inset-right)) calc(30px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left)); }
+.plan-wrap.plein .plan-btns { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .plan-wrap.plein .plan-bas { flex-direction: row; align-items: flex-end; }
+  .plan-wrap.plein .plan-btns { flex: 0 1 auto; justify-content: flex-start; }
+  .plan-wrap.plein .iti-choix { align-self: auto; flex: none; width: min(53%, 365px); max-height: calc(100dvh - 103px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); margin-inline-start: auto; }
+}
+.plan-wrap.plein .maplibregl-ctrl-bottom-right { right: env(safe-area-inset-right); bottom: env(safe-area-inset-bottom); }
+.iti-choix { display: flex; flex-direction: column; min-height: 0; align-self: stretch; background: #fff; color: #1C1C1E; border-radius: 22px; padding: 12px; box-shadow: 0 -4px 24px rgba(0, 0, 0, .22); }
 .iti-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; border: 0; background: none; color: inherit; text-align: left; padding: 10px 12px; border-radius: 14px; cursor: pointer; font: inherit; }
 .iti-option.on { background: #EFE7FD; box-shadow: inset 4px 0 0 #7B2FF7; }
 .iti-option b { display: block; font-size: 24px; line-height: 1.1; }
 .iti-option small { color: #6B6B70; font-size: 14px; }
 .iti-modes { margin: 0 0 6px; padding: 0 4px; }
 .iti-modes .chip:not(.on) { background: #F0F0F3; color: #1C1C1E; }
-.iti-actions { display: flex; gap: 10px; margin-top: 8px; }
+#itiListe { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.iti-actions { display: flex; flex-shrink: 0; gap: 10px; margin-top: 8px; }
 .iti-actions .btn { flex: 1; margin: 0; }
 .iti-actions .btn:not(.primaire) { background: #F0F0F3; color: #007AFF; }
 .iti-bulle { background: #fff; color: #1C1C1E; font-weight: 700; font-size: 16px; line-height: 1.15; padding: 6px 10px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); cursor: pointer; white-space: nowrap; }
@@ -456,13 +476,12 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 .plan-nav { width: 70px; height: 70px; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .35)); }
 .plan-nav svg { width: 100%; height: 100%; }
 .plan-nav path { fill: #007AFF; stroke: #fff; stroke-width: 3; stroke-linejoin: round; }
-.nav-bandeau { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 501; display: flex; align-items: center; gap: 10px;
+.nav-bandeau { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px;
   background: #1F7A4D; color: #fff; border-radius: 16px; padding: 12px 12px 12px 16px; box-shadow: 0 6px 18px rgba(0, 0, 0, .3); }
 .nav-bandeau > div { flex: 1; min-width: 0; }
 .nav-bandeau b { display: block; font-size: 18px; line-height: 1.2; }
 .nav-bandeau small { display: block; font-size: 14px; opacity: .85; margin-top: 2px; }
 .nav-bandeau button { border: 0; background: rgba(255, 255, 255, .2); color: #fff; width: 36px; height: 36px; border-radius: 50%; font-size: 16px; cursor: pointer; flex: none; padding: 0; display: grid; place-items: center; line-height: 1; }
-.plan-wrap.plein .nav-bandeau { top: calc(10px + env(safe-area-inset-top)); }
 /* Devant moi */
 .devant-info { margin: -2px 0 6px; text-align: center; }
 #btnDevant { padding: 6px 13px; font-size: 14px; }
@@ -596,3 +615,20 @@ body, .carte, .top, .tabs, .chip, .btn, #fiches li { transition: background-colo
 @keyframes battement { 50% { transform: scale(1.6); opacity: .5; } }
 @keyframes titreArrive { from { opacity: 0; transform: translateX(-16px); } }
 @keyframes respireTexte { 50% { transform: scale(1.04); } }
+
+/* Réglages de la carte */
+#reglagesCarte { padding: 18px; max-height: min(86dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px)); }
+#reglagesCarte h2 { margin: 0 44px 14px 0; font-size: 23px; }
+.reglages-corps { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 2px; }
+.reglages-corps details, .reglages-lien { display: block; margin-bottom: 5px; padding: 0 12px; background: var(--bg2); border-radius: 10px; }
+.reglages-corps details[open] { padding-bottom: 10px; }
+.reglages-corps summary, .reglages-lien { padding: 11px 12px; cursor: pointer; font-weight: 600; }
+.reglages-corps summary { margin: 0 -12px; }
+.reglages-corps p { margin: 6px 0; overflow-wrap: anywhere; }
+.reglages-corps label { display: block; margin: 8px 0; font-size: 15px; }
+.reglages-corps select { display: block; width: 100%; margin-top: 4px; min-height: 39px; border: 1px solid var(--ligne); border-radius: 8px; background: var(--surface); color: var(--txt); padding: 4px 8px; font: inherit; }
+.reglages-corps label.reglages-case { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+.reglages-case input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+.reglages-actions { display: flex; gap: 8px; }
+.reglages-lien { color: var(--accent); }
+#regCartesHorsLigne .carte { margin: 0; padding: 4px 0; background: transparent; box-shadow: none; border: 0; }
