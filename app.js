@@ -496,9 +496,10 @@ majTrace();
 // ensuite il est gardé dans le téléphone et la boussole peut prendre le relais en ligne droite.
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 // Styles de carte (demande d'Aziz : la carte claire éblouit) : mêmes morceaux, polices et pictos chez OpenFreeMap, donc la carte téléchargée marche avec tous
-const STYLES = [['liberty', 'Clair'], ['positron', 'Doux'], ['dark', 'Sombre'], ['fiord', 'Nuit']];
+const STYLES = [['auto', 'Auto'], ['liberty', 'Clair'], ['positron', 'Doux'], ['dark', 'Sombre'], ['fiord', 'Nuit']];
 const styleCarte = () => STYLES.find(x => x[0] === S.styleCarte) || STYLES[0];
-const urlStyle = () => `https://tiles.openfreemap.org/styles/${styleCarte()[0]}`;
+const nomStyle = () => styleCarte()[0] === 'auto' ? (document.documentElement.dataset.theme === 'nuit' ? 'dark' : 'liberty') : styleCarte()[0]; // Auto : carte sombre la nuit, comme Waze
+const urlStyle = () => `https://tiles.openfreemap.org/styles/${nomStyle()}`;
 const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const MODES = { foot: ['routed-foot', t('à pied')], bike: ['routed-bike', t('à vélo')], car: ['routed-car', t('en voiture')] };
 let plan = null, moiMk = null, destMk = null, ptsMk = [], suivre = true, en3D = false;
@@ -532,12 +533,12 @@ function initPlan() {
     // Carte épurée (demande d'Aziz) : pas de bâtiments ni d'arrêts de transport ; seuls points affichés : essence, hôtels,
     // restaurants, hôpitaux (la classe « hospital » d'OpenMapTiles comprend les cliniques)
     // Ciel peint (sinon transparent = bande grise au-dessus de l'horizon en vue inclinée) : la carte remplit tout l'écran
-    const sombre = ['dark', 'fiord'].includes(styleCarte()[0]);
+    const sombre = ['dark', 'fiord'].includes(nomStyle());
     plan.setSky(sombre ? { 'sky-color': '#0B1220', 'horizon-color': '#1C2533', 'fog-color': '#1C2533', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.6 }
       : { 'sky-color': '#DCEAF5', 'horizon-color': '#EEF3F6', 'fog-color': '#F2EFE9', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.6 });
     // Fond plus clair et eau plus bleue, façon GPS de voiture (2D comme 3D), seulement sur le style clair
-    if (styleCarte()[0] === 'liberty') plan.getLayer('background') && plan.setPaintProperty('background', 'background-color', '#F4F2EE');
-    if (styleCarte()[0] === 'liberty') plan.getLayer('water') && plan.setPaintProperty('water', 'fill-color', '#9DCFF2');
+    if (nomStyle() === 'liberty') plan.getLayer('background') && plan.setPaintProperty('background', 'background-color', '#F4F2EE');
+    if (nomStyle() === 'liberty') plan.getLayer('water') && plan.setPaintProperty('water', 'fill-color', '#9DCFF2');
     ['building', 'building-3d', 'poi_transit'].forEach(id => plan.getLayer(id) && plan.setLayoutProperty(id, 'visibility', 'none'));
     ['poi_r1', 'poi_r7', 'poi_r20'].forEach(id => {
       if (!plan.getLayer(id)) return;
@@ -811,7 +812,7 @@ async function garderCarte(btn, nom, morceaux) {
   try {
     const [tj, style] = await Promise.all([fetch('https://tiles.openfreemap.org/planet').then(r => r.json()), fetch(STYLE).then(r => r.json())]);
     const polices = ['Noto Sans Regular', 'Noto Sans Bold', 'Noto Sans Italic'].flatMap(f => ['0-255', '256-511', '512-767', '768-1023', '1024-1279', '1280-1535', '1536-1791', '3584-3839', '8192-8447'].map(r => `https://tiles.openfreemap.org/fonts/${encodeURIComponent(f)}/${r}.pbf`));
-    const urls = [...STYLES.map(([k]) => `https://tiles.openfreemap.org/styles/${k}`), 'https://tiles.openfreemap.org/planet', ...polices, ...['.json', '.png', '@2x.json', '@2x.png'].map(x => style.sprite + x), ...morceaux(tj, style)];
+    const urls = [...STYLES.filter(([k]) => k !== 'auto').map(([k]) => `https://tiles.openfreemap.org/styles/${k}`), 'https://tiles.openfreemap.org/planet', ...polices, ...['.json', '.png', '@2x.json', '@2x.png'].map(x => style.sprite + x), ...morceaux(tj, style)];
     await navigator.storage?.persist?.(); // demande au téléphone de ne pas effacer ces cartes
     const c = await caches.open(ZONES), file = [...urls];
     let fait = 0, rate = 0;
@@ -1566,16 +1567,21 @@ $('#btnFond').onclick = () => {
   popup('<h2>Fond d\'écran créé</h2><p>Mets cette image en <b>fond d\'écran verrouillé</b> (Photos › Partager › Utiliser en fond d\'écran). Un secouriste verra tes infos sans déverrouiller le téléphone.</p>');
 };
 
-// Thème nuit rouge
+// Jour / nuit automatique, comme Waze : sombre du coucher au lever du soleil (à ta position, sinon centre de la France)
+const estNuit = () => { const s = sunTimes(new Date(), ...(pos ? ici() : [46.6, 2.4])), n = Date.now(); return !s.rise || n < s.rise || n > s.set; };
+if (S.theme) { delete S.theme; save(); } // l'ancien mode nuit rouge est retiré
 const appliquerTheme = () => {
-  document.documentElement.dataset.theme = S.theme; $('#btnRouge').setAttribute('aria-pressed', S.theme === 'rouge');
+  const nuit = estNuit(), avant = document.documentElement.dataset.theme;
+  document.documentElement.dataset.theme = nuit ? 'nuit' : 'jour';
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', S.ambiance ? '#1C1C1E' : nuit ? '#000000' : '#DCE7F3');
+  if (avant && avant !== document.documentElement.dataset.theme && styleCarte()[0] === 'auto') plan?.setStyle?.(urlStyle());
   // Styles Studio : même mise en page sombre, couleurs différentes (graphite = l'ancien interrupteur « Style Studio »)
   if (S.studio) { S.ambiance = 'graphite'; delete S.studio; save(); }
   document.documentElement.classList.toggle('studio', !!S.ambiance); document.documentElement.dataset.ambiance = S.ambiance || '';
   document.querySelectorAll('#ambiances [data-a]').forEach(b => b.classList.toggle('on', b.dataset.a === (S.ambiance || '')));
 };
 $('#ambiances').onclick = e => { const b = e.target.closest('[data-a]'); if (!b) return; S.ambiance = b.dataset.a; save(); appliquerTheme(); };
-$('#btnRouge').onclick = () => { S.theme = S.theme === 'rouge' ? '' : 'rouge'; save(); appliquerTheme(); };
+setInterval(appliquerTheme, 60e3);
 appliquerTheme();
 
 // ---------- T’es où ? à proximité : Bluetooth (application Android) ou réseau cellulaire (version web, iPhone) ----------

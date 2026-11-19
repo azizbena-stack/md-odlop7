@@ -1,24 +1,23 @@
 /* Repère — style iOS : fonds groupés, cartes arrondies, bleu système, verre dépoli ; météo en ciel dégradé.
    Clair ou sombre selon le téléphone, mode nuit rouge en option. */
 :root {
-  --bg: #E8E8ED; --bg2: rgba(118, 118, 128, .12); --surface: #F6F6F3; --surface2: #F6F6F3; --ligne: rgba(60, 60, 67, .14);
+  --bg: #DCE7F3; --bg2: rgba(60, 100, 160, .1); --surface: #F3F7FB; --surface2: #F3F7FB; --ligne: rgba(60, 60, 67, .14);
   --txt: #000000; --txt2: #6C6C70; --txt3: #AEAEB2;
   --accent: #007AFF; --accent2: #007AFF; --ambre: #FF3B30; --ok: #248A3D; --vert: #34C759; --warn: #D70015; --danger: #FF3B30;
-  --barre: rgba(238, 238, 240, .8); --verre-bord: rgba(255, 255, 255, .6);
+  --barre: rgba(226, 235, 245, .82); --verre-bord: rgba(255, 255, 255, .6);
   --ombre: 0 1px 2px rgba(0, 0, 0, .04), 0 6px 20px rgba(0, 0, 0, .05);
   --r: 22px; --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, monospace;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="rouge"]) {
+/* Nuit (automatique, du coucher au lever du soleil, comme Waze) : sombre iOS */
+:root[data-theme="nuit"] {
     --bg: #000000; --bg2: rgba(118, 118, 128, .24); --surface: #1C1C1E; --surface2: #1C1C1E; --ligne: rgba(84, 84, 88, .55);
     --txt: #FFFFFF; --txt2: #98989F; --txt3: #636366;
     --accent: #0A84FF; --accent2: #0A84FF; --ambre: #FF453A; --ok: #30D158; --vert: #30D158; --warn: #FF453A; --danger: #FF453A;
     --barre: rgba(30, 30, 32, .72); --verre-bord: rgba(255, 255, 255, .1); --ombre: none;
     color-scheme: dark;
   }
-}
 /* Mode survie : toujours sombre (économise la batterie, ambiance alerte) */
 :root.survie:not([data-theme="rouge"]) {
   --bg: #000000; --bg2: rgba(118, 118, 128, .24); --surface: #1C1C1E; --surface2: #1C1C1E; --ligne: rgba(84, 84, 88, .55);
@@ -569,3 +568,31 @@ dialog { position: fixed; }
 :root[data-theme="rouge"] .chip .ic { color: inherit !important; }
 :root[data-theme="rouge"] .logo-radio { filter: grayscale(1) brightness(.55) sepia(1) hue-rotate(-45deg) saturate(6); }
 #ambiances { flex-wrap: wrap; overflow: visible; }
+
+/* ---------- Encore plus d'animations ---------- */
+/* Passage jour ↔ nuit en fondu */
+body, .carte, .top, .tabs, .chip, .btn, #fiches li { transition: background-color .8s ease, color .8s ease, border-color .8s ease; }
+@media (prefers-reduced-motion: no-preference) {
+  /* Reflet qui passe sur les boutons principaux */
+  .btn.primaire { position: relative; overflow: hidden; }
+  .btn.primaire::after { content: ''; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .35) 50%, transparent 70%); transform: translateX(-120%); animation: reflet 4.5s ease-in-out 1.5s infinite; pointer-events: none; }
+  /* Fiches du guide qui arrivent l'une après l'autre */
+  #fiches li { animation: entree .4s cubic-bezier(.2, .8, .2, 1) both; }
+  #fiches li:nth-child(2) { animation-delay: .04s; } #fiches li:nth-child(3) { animation-delay: .08s; } #fiches li:nth-child(4) { animation-delay: .12s; }
+  #fiches li:nth-child(5) { animation-delay: .16s; } #fiches li:nth-child(n+6) { animation-delay: .2s; }
+  /* Cartes qui s'enfoncent sous le doigt */
+  .carte, #fiches li, .tuile { transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .8s ease, color .8s ease; }
+  .carte:active, #fiches li:active, .tuile:active { transform: scale(.98); }
+  /* « Prêt hors réseau » : point vert qui bat */
+  .brand small:not(.off)::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 5px; vertical-align: 1px; animation: battement 2s ease-in-out infinite; }
+  /* Interrupteurs qui glissent avec un petit rebond */
+  .switch, .switch::after { transition: all .35s cubic-bezier(.3, 1.5, .5, 1); }
+  /* Gros titres qui glissent en arrivant sur un onglet */
+  .vue.active .titre { animation: titreArrive .5s cubic-bezier(.2, .8, .2, 1) both; }
+  /* Grand « Pas de panique » qui respire doucement */
+  .coach.panique .coach-msg { animation: respireTexte 3.5s ease-in-out infinite; }
+}
+@keyframes reflet { 0% { transform: translateX(-120%); } 35%, 100% { transform: translateX(120%); } }
+@keyframes battement { 50% { transform: scale(1.6); opacity: .5; } }
+@keyframes titreArrive { from { opacity: 0; transform: translateX(-16px); } }
+@keyframes respireTexte { 50% { transform: scale(1.04); } }

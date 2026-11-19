@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>T’es où ? · Survie hors réseau</title>
 <meta name="description" content="Survie, orientation et secours, sans internet. Toute la France.">
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F2F2F7">
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+<meta name="theme-color" content="#DCE7F3">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-512.png">
@@ -372,14 +371,10 @@
     <button class="switch" id="btnAlerteDanger" aria-pressed="true"></button>
   </div>
   <div class="carte">
-    <b>Style de l'app</b><div class="meta">Clair adouci, ou un style Studio sombre et épuré</div>
+    <b>Style de l'app</b><div class="meta">Auto : clair le jour, sombre la nuit (comme Waze), ou un style Studio</div>
     <div class="chips" id="ambiances" style="margin-top:10px">
-      <button class="chip" data-a="">Clair</button><button class="chip" data-a="graphite">Studio graphite</button><button class="chip" data-a="minuit">Studio minuit</button><button class="chip" data-a="foret">Studio forêt</button><button class="chip" data-a="prune">Studio prune</button>
+      <button class="chip" data-a="">Auto jour / nuit</button><button class="chip" data-a="graphite">Studio graphite</button><button class="chip" data-a="minuit">Studio minuit</button><button class="chip" data-a="foret">Studio forêt</button><button class="chip" data-a="prune">Studio prune</button>
     </div>
-  </div>
-  <div class="carte row">
-    <div><b>Mode nuit rouge</b><div class="meta">Tout l'écran en rouge, pour ne pas t'éblouir</div></div>
-    <button class="switch" id="btnRouge" aria-pressed="false"></button>
   </div>
   <p class="credits">Données : communes © État français (geo.api.gouv.fr) · refuges et points d'eau © refuges.info (CC BY-SA) · hôpitaux © contributeurs OpenStreetMap (ODbL) · T’es où ? ne remplace pas les secours ni une formation.<br><a href="legal.html" target="_blank" rel="noopener">Mentions légales · conditions · confidentialité · licences</a><br><span id="version"></span></p>
 </section>
