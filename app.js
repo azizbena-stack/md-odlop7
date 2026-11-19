@@ -937,6 +937,85 @@ function consigne(s) {
 // « Y aller » qui bloquait : pas de délai max (une demande pouvait pendre longtemps), 3 demandes d'un coup au serveur gratuit
 // (refus fréquents), et une réponse lente pouvait écraser un trajet demandé après. Maintenant : 15 s max, 2e essai,
 // trajet principal affiché tout de suite, variantes ensuite, réponses périmées ignorées.
+// ---------- Itinéraire sans réseau : calculé sur les routes de la carte téléchargée ----------
+// Les morceaux de carte gardés dans le téléphone contiennent le tracé des routes (couche « transportation »).
+// On cadre départ + arrivée, on lit les routes chargées, on en fait un réseau et on cherche le plus court (A*).
+// ponytail: réseau lu sur les morceaux affichés (détail selon le zoom du cadrage : grandes routes seulement pour un long trajet,
+// et seulement là où la carte a été téléchargée) ; pas de sens interdits fins ni de restrictions de virage.
+const VIT = { car: { motorway: 115, trunk: 95, primary: 75, secondary: 65, tertiary: 55, minor: 40, service: 20, raceway: 0, track: 0, path: 0, busway: 0 },
+  bike: { motorway: 0, trunk: 0, primary: 16, secondary: 16, tertiary: 16, minor: 15, service: 14, track: 12, path: 12 },
+  foot: { motorway: 0, trunk: 0, primary: 4.5, secondary: 4.5, tertiary: 4.8, minor: 4.8, service: 4.8, track: 4.8, path: 4.5 } };
+const attendreCarte = ms => new Promise(ok => { let fini = false; const f = () => { if (!fini) { fini = true; ok(); } }; plan.once('idle', f); setTimeout(f, ms); });
+async function itiHorsLigne(dep, arr, mode) {
+  initPlan(); if (!plan) throw new Error('carte indisponible');
+  if (!plan.isStyleLoaded()) await new Promise(ok => { plan.once('style.load', ok); setTimeout(ok, 6000); });
+  const src = Object.entries(plan.getStyle().sources).find(([, v]) => v.type === 'vector')?.[0];
+  if (!src) throw new Error('carte non téléchargée');
+  const b = new maplibregl.LngLatBounds(lnglat(dep), lnglat(dep)).extend(lnglat(arr));
+  plan.fitBounds(b, { padding: 40, maxZoom: 14, duration: 0, bearing: 0, pitch: 0 });
+  await attendreCarte(7000);
+  const vit = VIT[mode] || VIT.car, cle = ([lo, la]) => Math.round(lo * 1e5) + ',' + Math.round(la * 1e5);
+  const noeuds = new Map(); // clé → { ll:[la,lo], v: [[clé voisin, secondes, mètres]] }
+  const noeud = c => { const k = cle(c); let n = noeuds.get(k); if (!n) noeuds.set(k, n = { k, ll: [c[1], c[0]], v: [] }); return n; };
+  const relier = (a, b, kmh, sens) => { const d = distance(a.ll, b.ll), s = d / (kmh / 3.6); if (sens >= 0) a.v.push([b, s, d]); if (sens <= 0) b.v.push([a, s, d]); };
+  const lignes = g => g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+  for (const f of plan.querySourceFeatures(src, { sourceLayer: 'transportation' })) {
+    const kmh = vit[f.properties.class]; if (!kmh) continue;
+    const sens = mode === 'car' ? (+f.properties.oneway || 0) : 0;
+    for (const l of lignes(f.geometry)) for (let i = 1; i < l.length; i++) { const a = noeud(l[i - 1]), c = noeud(l[i]); if (a !== c) relier(a, c, kmh, sens); }
+  }
+  const noms = new Map(); // nom des rues, lu sur la couche des noms (mêmes sommets)
+  for (const f of plan.querySourceFeatures(src, { sourceLayer: 'transportation_name' })) {
+    const n = f.properties['name:' + LANGUE] || f.properties.name || f.properties.ref; if (!n) continue;
+    for (const l of lignes(f.geometry)) for (const c of l) noms.set(cle(c), n);
+  }
+  if (noeuds.size < 2) throw new Error('pas de routes dans la carte téléchargée ici');
+  // Raccords : bouts de route à moins de 20 m d'une autre route (coutures entre morceaux de carte, carrefours mal dessinés)
+  const grille = new Map(), cel = ([la, lo]) => Math.floor(la / .0004) + ':' + Math.floor(lo / .0004);
+  for (const n of noeuds.values()) { const c = cel(n.ll); (grille.get(c) || grille.set(c, []).get(c)).push(n); }
+  const autour = (ll, r) => { const [i, j] = cel(ll).split(':').map(Number), out = [];
+    for (let a = -r; a <= r; a++) for (let o = -r; o <= r; o++) out.push(...(grille.get((i + a) + ':' + (j + o)) || [])); return out; };
+  for (const n of noeuds.values()) if (n.v.length <= 1) {
+    let m = null, dm = 20; for (const x of autour(n.ll, 1)) { if (x === n || n.v.some(e => e[0] === x)) continue; const d = distance(n.ll, x.ll); if (d < dm) { dm = d; m = x; } }
+    if (m) relier(n, m, 10, 0);
+  }
+  const proche = ll => { let m = null, dm = Infinity; for (const n of noeuds.values()) { const d = distance(ll, n.ll); if (d < dm) { dm = d; m = n; } } return [m, dm]; };
+  const [n0, d0] = proche(dep), [n1, d1] = proche(arr);
+  if (d0 > 3000 || d1 > 3000) throw new Error('la carte téléchargée ne couvre pas ce trajet');
+  // A* : estimation = vol d'oiseau à la vitesse max
+  const vmax = Math.max(...Object.values(vit)) / 3.6, h = n => distance(n.ll, n1.ll) / vmax;
+  const g = new Map([[n0, 0]]), de = new Map(), tas = [[h(n0), n0]], fermes = new Set();
+  const pousser = x => { tas.push(x); let i = tas.length - 1; while (i) { const p = (i - 1) >> 1; if (tas[p][0] <= tas[i][0]) break; [tas[p], tas[i]] = [tas[i], tas[p]]; i = p; } };
+  const tirer = () => { const top = tas[0], last = tas.pop(); if (tas.length) { tas[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i;
+    if (l < tas.length && tas[l][0] < tas[m][0]) m = l; if (r < tas.length && tas[r][0] < tas[m][0]) m = r; if (m === i) break; [tas[m], tas[i]] = [tas[i], tas[m]]; i = m; } } return top; };
+  while (tas.length) {
+    const [, n] = tirer(); if (fermes.has(n)) continue; if (n === n1) break; fermes.add(n);
+    for (const [x, s] of n.v) { const gx = g.get(n) + s; if (gx < (g.get(x) ?? Infinity)) { g.set(x, gx); de.set(x, n); pousser([gx + h(x), x]); } }
+  }
+  if (!g.has(n1)) throw new Error('aucun chemin trouvé sur la carte téléchargée');
+  const chemin = [n1]; while (chemin[0] !== n0) chemin.unshift(de.get(chemin[0]));
+  const geo = chemin.map(n => n.ll.map(x => +x.toFixed(5)));
+  let d = 0; for (let i = 1; i < geo.length; i++) d += distance(geo[i - 1], geo[i]);
+  // Consignes : aux carrefours où l'on tourne de plus de 30°
+  const cap = (i, sens) => { let j = i, dd = 0; while (j + sens >= 0 && j + sens < geo.length && dd < 25) { dd += distance(geo[j], geo[j + sens]); j += sens; } return j === i ? null : bearing(sens < 0 ? geo[j] : geo[i], sens < 0 ? geo[i] : geo[j]); };
+  const nom = i => noms.get(chemin[i].k) || noms.get(chemin[Math.min(i + 1, chemin.length - 1)].k) || '';
+  const etapes = [], mk = (i, type, modifier) => ({ i, s: { maneuver: { type, modifier }, name: nom(i) } });
+  const virages = [mk(0, 'depart')];
+  for (let i = 1; i < chemin.length - 1; i++) {
+    if (chemin[i].v.length < 3) continue; // pas un carrefour
+    const a = cap(i, -1), c = cap(i, 1); if (a == null || c == null) continue;
+    const dv = ((c - a + 540) % 360) - 180, ad = Math.abs(dv); if (ad < 30) continue;
+    const cote = dv < 0 ? 'left' : 'right';
+    virages.push(mk(i, 'turn', ad > 150 ? 'uturn' : ad > 110 ? 'sharp ' + cote : ad > 55 ? cote : 'slight ' + cote));
+  }
+  virages.push(mk(chemin.length - 1, 'arrive'));
+  const cum = [0]; for (let i = 1; i < geo.length; i++) cum.push(cum[i - 1] + distance(geo[i - 1], geo[i]));
+  virages.forEach((v, k) => etapes.push([consigne(v.s), Math.round((virages[k + 1] ? cum[virages[k + 1].i] : cum[v.i]) - cum[v.i]), geo[v.i]]));
+  // Le tracé part de ma position et finit à l'arrivée (sinon « Tu t'écartes » dès le départ si la route la plus proche est à 100 m)
+  const r5 = ll => ll.map(x => +x.toFixed(5)), vol = (vit.minor || 40) / 3.6;
+  return { d: d + d0 + d1, t: g.get(n1) + (d0 + d1) / Math.min(vol, 5), via: t('carte téléchargée, sans réseau'), geo: [r5(dep), ...geo, r5(arr)], etapes, horsLigne: true };
+}
+
 let calcId = 0;
 async function calculerIti() {
   if (!destination) return;
@@ -945,6 +1024,15 @@ async function calculerIti() {
   if (!dep) return $('#itiRes').textContent = 'Position inconnue : active le GPS.';
   $('#itiRes').textContent = t('Calcul de l\'itinéraire {m} vers {d}…', { m: MODES[mode][1], d: dest.nom });
   $('#btnItiBoussole').hidden = false;
+  // Sans réseau (ou serveur injoignable) : itinéraire calculé sur la carte téléchargée
+  const sansReseau = async raison => {
+    $('#itiRes').textContent = t('Pas de réseau : calcul sur la carte téléchargée…');
+    try {
+      const a = await itiHorsLigne(dep, dest.ll, mode); if (id !== calcId) return true;
+      S.route = { dest, mode, alts: [a], choix: 0, ...a }; noterTrajet(S.route); proposerItis(); dessinerRoute(S.route, true); return true;
+    } catch (e) { if (id === calcId) console.warn('itinéraire hors ligne', e); return false; }
+  };
+  if (!navigator.onLine && await sansReseau()) return;
   try {
     // Le serveur gratuit ne propose qu'un trajet : on en demande deux autres qui passent par un point à gauche
     // et à droite de la ligne droite, et on garde ceux qui sont vraiment différents et pas trop longs (comme un GPS)
@@ -976,8 +1064,10 @@ async function calculerIti() {
     save(); dessinerRoute(S.route, S.route.choix === 0); if (!$('#itiChoix').hidden) proposerItis();
   } catch (e) {
     if (id !== calcId) return;
+    if (navigator.onLine && e.name !== 'AbortError' && await sansReseau()) return; // réseau trop faible : on tente la carte gardée
+    if (id !== calcId) return;
     const d = distance(dep, dest.ll), raison = e.name === 'TimeoutError' ? 'le serveur ne répond pas, retouche « Y aller »' : e.message;
-    $('#itiRes').innerHTML = (navigator.onLine ? t('Itinéraire impossible ({r}).', { r: esc(t(raison)) }) : t('Pas de réseau : l\'itinéraire se calcule en ligne.'))
+    $('#itiRes').innerHTML = (navigator.onLine ? t('Itinéraire impossible ({r}).', { r: esc(t(raison)) }) : t('Pas de réseau, et la carte téléchargée ne couvre pas ce trajet (télécharge la zone dans l\'onglet Carte).'))
       + t(' {n} est à {d} à vol d\'oiseau, direction {c}. La boussole peut t\'y guider en ligne droite.', { n: esc(dest.nom), d: fmtDist(d), c: cardinal(bearing(dep, dest.ll)) });
   }
 }
