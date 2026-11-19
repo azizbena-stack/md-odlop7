@@ -11,7 +11,7 @@ export const FICHES = [
 <li><b>Arrête-toi.</b> Ne marche plus au hasard. Assieds-toi, bois une gorgée, respire lentement dix fois.</li>
 <li><b>Réfléchis.</b> D'où viens-tu ? Quel est le dernier endroit que tu connais avec certitude ?</li>
 <li><b>Observe.</b> Heure de la nuit, météo, eau, nourriture, batterie, blessures, matériel.</li>
-<li><b>Décide.</b> Si quelqu'un sait où tu es : <b>reste sur place</b>, les secours cherchent d'abord le long de ton itinéraire. Sinon, reviens vers le dernier point connu, ou vers le lieu habité indiqué par Repère.</li>
+<li><b>Décide.</b> Si quelqu'un sait où tu es : <b>reste sur place</b>, les secours cherchent d'abord le long de ton itinéraire. Sinon, reviens vers le dernier point connu, ou vers le lieu habité indiqué par T’es où ?</li>
 </ol>
 <p class="note">La plupart des personnes perdues sont retrouvées en moins de 24 h, surtout celles qui restent visibles et immobiles.</p>
 <p>Si tu bouges : marque ton passage (cairns, branches cassées, flèches au sol), et enregistre ta position de départ dans <b>Boussole › Retour</b>.</p>` },
@@ -164,7 +164,7 @@ export const FICHES = [
 <p class="note">La mousse sur les arbres n'est pas un repère fiable.</p>` },
 
 { id: 'civilisation', cat: 'orient', titre: 'Retrouver la civilisation', mots: 'civilisation village route trouver sortir humain chemin',
-  corps: `<ul><li>Repère t'indique en continu le <b>lieu habité le plus proche</b> et si tu t'en rapproches.</li>
+  corps: `<ul><li>T’es où ? t'indique en continu le <b>lieu habité le plus proche</b> et si tu t'en rapproches.</li>
 <li>Signes de présence humaine : sentiers, balisage, clôtures, lignes électriques, bruit de moteur, chiens, cloches, fumée, lumières la nuit.</li>
 <li>Un <b>sentier</b> mène presque toujours quelque part. Suis-le plutôt que de couper à travers.</li>
 <li>Méfiance : suivre un ruisseau vers le bas peut mener à une cascade ou un ravin.</li>
@@ -208,7 +208,7 @@ export const FICHES = [
 
 FICHES.push(
 { id: 'homme-mer', cat: 'mer', titre: 'Homme à la mer', mots: 'homme mer tombé eau bateau chute équipier mob',
-  corps: `<ol><li><b>Crie</b> « Un homme à la mer ! » et appuie sur <b>Homme à la mer</b> dans Repère : la position est enregistrée et la flèche te ramène dessus.</li>
+  corps: `<ol><li><b>Crie</b> « Un homme à la mer ! » et appuie sur <b>Homme à la mer</b> dans T’es où ? : la position est enregistrée et la flèche te ramène dessus.</li>
 <li><b>Désigne quelqu'un</b> qui le montre du doigt sans jamais le quitter des yeux.</li>
 <li><b>Lance</b> bouée, perche IOR, tout ce qui flotte.</li>
 <li><b>Alerte</b> : VHF canal 16 (MAYDAY) ou bouton rouge ASN/DSC, sinon 196 (CROSS) ou 112.</li>
@@ -243,7 +243,7 @@ FICHES.push(
 <li><b>Feu à main rouge</b> : quand les secours approchent, pour montrer ta position.</li>
 <li><b>Fumigène orange</b> : de jour, très visible d'un avion ou d'un hélicoptère.</li>
 <li><b>Bras tendus levés et abaissés lentement</b> : signal de détresse international.</li>
-<li>Lampe, miroir, sifflet, et le <b>SOS lumineux</b> de Repère.</li></ul>
+<li>Lampe, miroir, sifflet, et le <b>SOS lumineux</b> de T’es où ?</li></ul>
 <p class="warn">Tiens les feux à main sous le vent, bras tendu, et ne regarde pas la flamme.</p>` },
 
 { id: 'mal-de-mer', cat: 'mer', titre: 'Mal de mer', mots: 'mal mer nausée vomir bateau',
@@ -266,7 +266,7 @@ FICHES.push(
 <li><b>Houle qui grossit sans vent</b> : tempête au loin, elle peut arriver.</li>
 <li><b>Vent qui tourne brusquement</b> et fraîchit : passage d'un front.</li>
 <li><b>Brouillard du matin</b> qui se lève tôt : souvent beau temps.</li></ul>
-<p class="note">La météo téléchargée dans Repère montre aussi l'évolution de la pression prévue.</p>` },
+<p class="note">La météo téléchargée dans T’es où ? montre aussi l'évolution de la pression prévue.</p>` },
 );
 
 // Animaux présents selon le département (zones principales, simplifié)

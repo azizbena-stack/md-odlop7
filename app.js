@@ -1,14 +1,41 @@
-import { distance, bearing, nearest, cardinal, fmtDist, dms, sunTimes, ecartAngle, devant } from './geo.js';
+import { distance, bearing, nearest, cardinal, fmtDist, dms, sunTimes, ecartAngle, devant, CARDINAUX, FMT } from './geo.js';
+import { DICT, CARDINAUX as CARDS } from './i18n.js';
 import { FICHES, CATS, risquesLocaux } from './guide.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
+// Icônes dessinées (jeu d'icônes en haut d'index.html), à la place des émojis
+const pic = (n, c = '') => `<svg class="ic${c ? ' ' + c : ''}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---------- Mémoire locale ----------
 let S = { profil: 'rando', fiche: {}, contacts: [], points: [], trace: [], sac: [], plan: {}, theme: '', ia: false, cible: null };
 try { Object.assign(S, JSON.parse(localStorage.getItem('repere') || '{}')); } catch {}
 const save = () => { try { localStorage.setItem('repere', JSON.stringify(S)); } catch {} };
+
+// ---------- Langue : français, anglais, espagnol ----------
+// Les textes restent écrits en français dans le code ; i18n.js donne leur traduction. Changer de langue recharge l'app.
+const LANGUES = ['fr', 'en', 'es'], nav2 = (navigator.language || 'en').slice(0, 2);
+const LANGUE = LANGUES.includes(S.langue) ? S.langue : LANGUES.includes(nav2) ? nav2 : 'en';
+const LOC = { fr: 'fr-FR', en: 'en-GB', es: 'es-ES' }[LANGUE], D = DICT[LANGUE] || {};
+const t = (fr, v = {}) => (D[fr] ?? fr).replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
+CARDINAUX.splice(0, 8, ...CARDS[LANGUE]); FMT.dec = LANGUE === 'en' ? '.' : ',';
+document.documentElement.lang = LANGUE;
+// Textes fixes de la page et des fenêtres : traduits à l'affichage (texte exact, espaces ignorés)
+const cleT = x => x.replace(/\s+/g, ' ').trim();
+function traduire(racine) {
+  if (LANGUE === 'fr') return;
+  if (racine.nodeType === 3) { const k = cleT(racine.data); if (D[k] && D[k] !== k) racine.data = racine.data.replace(racine.data.trim(), D[k]); return; }
+  if (racine.nodeType !== 1 || racine.closest?.('script,style,.fiche-texte')) return;
+  for (const el of [racine, ...racine.querySelectorAll('*')]) {
+    for (const a of ['placeholder', 'aria-label', 'title']) { const v = el.getAttribute?.(a); if (v && D[cleT(v)]) el.setAttribute(a, D[cleT(v)]); }
+    if (el.children.length && D[cleT(el.innerHTML)]) el.innerHTML = D[cleT(el.innerHTML)]; // phrase avec <b>, <a>…
+  }
+  const w = document.createTreeWalker(racine, NodeFilter.SHOW_TEXT); for (let n; (n = w.nextNode());) traduire(n);
+}
+traduire(document.body);
+new MutationObserver(ms => ms.forEach(m => m.type === 'characterData' ? traduire(m.target) : m.type === 'attributes' ? traduire(m.target) : m.addedNodes.forEach(traduire)))
+  .observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'aria-label', 'title'] });
 
 // ---------- Hors ligne ----------
 if ('serviceWorker' in navigator) {
@@ -42,7 +69,7 @@ $$('[data-seg]').forEach(b => b.onclick = () => ouvrir(b.dataset.seg));
 
 const modal = $('#modal');
 function popup(html) { $('#modalBody').innerHTML = html; modal.showModal(); }
-$('#modalFermer').onclick = () => { stopMetro(); modal.close(); };
+$('#modalFermer').onclick = $('#modalX').onclick = () => { stopMetro(); modal.close(); };
 modal.addEventListener('close', stopMetro);
 
 // ---------- Données France ----------
@@ -62,7 +89,7 @@ function demarrerGps() {
     if (e.code === 1) { navigator.geolocation.clearWatch(watchId); watchId = null; guidageEnAttente = false; }
     const ios = /iPhone|iPad/.test(navigator.userAgent);
     $('#posMeta').textContent = e.code !== 1 ? 'Signal GPS faible : va dans un endroit dégagé.'
-      : ios ? 'Localisation refusée. Réglages › Confidentialité et sécurité › Service de localisation › Sites web Safari : « Lorsque l\'app est active ». Puis Réglages › Apps › Safari › Localisation : « Demander ». Ferme et rouvre Repère.'
+      : ios ? 'Localisation refusée. Réglages › Confidentialité et sécurité › Service de localisation › Sites web Safari : « Lorsque l\'app est active ». Puis Réglages › Apps › Safari › Localisation : « Demander ». Ferme et rouvre T’es où ?'
       : 'Localisation refusée : Paramètres › Applications › Chrome › Autorisations › Position : « Autoriser ».';
     $('#btnGps').hidden = false;
   }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
@@ -74,8 +101,8 @@ function onPos(p) {
   pos = p;
   const [la, lo] = ici();
   $('#coords').textContent = `${la.toFixed(5)}, ${lo.toFixed(5)}`;
-  const alt = p.coords.altitude != null ? ` · altitude ${Math.round(p.coords.altitude)} m` : '';
-  $('#posMeta').textContent = `Précision ±${Math.round(p.coords.accuracy)} m${alt}`;
+  const alt = p.coords.altitude != null ? t(' · altitude {n} m', { n: Math.round(p.coords.altitude) }) : '';
+  $('#posMeta').textContent = t('Précision ±{n} m', { n: Math.round(p.coords.accuracy) }) + alt;
   $('#sosCoords').textContent = `${la.toFixed(5)}, ${lo.toFixed(5)}`;
   $('#sosDms').textContent = `${dms(la, 'N', 'S')}  ${dms(lo, 'E', 'O')}`;
   enregistrerTrace();
@@ -90,9 +117,9 @@ function onPos(p) {
 
 // ---------- Situation ----------
 const TYPES = {
-  eau: ['💧', "Point d'eau"], cabane: ['🛖', 'Cabane non gardée'], refuge: ['🏔', 'Refuge gardé'], gite: ['🏠', "Gîte d'étape"],
-  abri: ['⛰', 'Abri naturel'], hopital: ['✚', 'Hôpital · urgences'], danger: ['⚠', 'Passage délicat'],
-  port: ['⚓', 'Port · marina'], snsm: ['🛟', 'Station de sauvetage'],
+  eau: [pic('goutte', 'c-eau'), "Point d'eau"], cabane: [pic('cabane', 'c-refuge'), 'Cabane non gardée'], refuge: [pic('refuge', 'c-refuge'), 'Refuge gardé'], gite: [pic('gite', 'c-gite'), "Gîte d'étape"],
+  abri: [pic('abri', 'c-abri'), 'Abri naturel'], hopital: [pic('hopital', 'c-hopital'), 'Hôpital · urgences'], danger: [pic('danger', 'c-danger'), 'Passage délicat'],
+  port: [pic('ancre', 'c-port'), 'Port · marina'], snsm: [pic('bouee', 'c-hopital'), 'Station de sauvetage'],
 };
 let dernierVillage = null, depActuel = null;
 
@@ -104,7 +131,7 @@ function majSituation() {
   const [v] = nearest(COMMUNES, here);
   dernierVillage = v;
   $('#villageNom').textContent = v.p[0];
-  $('#villageInfo').textContent = `${fmtDist(v.d)} · ${cardinal(v.cap)} (${Math.round(v.cap)}°)${v.p[3] ? ' · ' + v.p[3].toLocaleString('fr-FR') + ' hab.' : ''}`;
+  $('#villageInfo').textContent = `${fmtDist(v.d)} · ${cardinal(v.cap)} (${Math.round(v.cap)}°)${v.p[3] ? ' · ' + v.p[3].toLocaleString(LOC) + ' hab.' : ''}`;
   $('#flecheVillage').dataset.cap = v.cap; rot($('#flecheVillage'), v.cap);
 
   // Tendance : se rapproche-t-on de ce village ?
@@ -141,7 +168,7 @@ function majSituation() {
     $('#risques').innerHTML = risquesLocaux(dep).map(r => `<li>${r}</li>`).join('');
     $('#risquesCarte').hidden = false;
   }
-  $('#sosLieu').textContent = `Près de ${v.p[0]} (${fmtDist(v.d)} ${cardinal(v.cap)})`;
+  $('#sosLieu').textContent = t('Près de {v}', { v: `${v.p[0]} (${fmtDist(v.d)} ${cardinal(v.cap)})` });
   majSmsProches();
 }
 
@@ -158,7 +185,7 @@ function dessinerRadar(here) {
     <text x="3" y="-68">3,3 km</text><text x="3" y="-35">1,7 km</text>
     <g transform="rotate(${rotH})"><text x="-4" y="-103" style="fill:var(--accent);font-size:10px">N</text></g>
     ${vil.map(n => { const [x, y] = xy(n); return `<g data-ll="${n.p[1]},${n.p[2]}" data-nom="${esc(n.p[0])}"><rect x="${x - 4}" y="${y - 4}" width="8" height="8" rx="2" fill="var(--txt)"/><text x="${x + 7}" y="${y + 3}" style="fill:var(--txt2)">${esc(n.p[0].slice(0, 14))}</text></g>`; }).join('')}
-    ${pts.map(n => { const [x, y] = xy(n); const c = n.p[0] === 'eau' ? '#5BB8FF' : n.p[0] === 'danger' ? 'var(--danger)' : n.p[0] === 'hopital' ? '#FF2D55' : 'var(--ambre)'; return `<g data-ll="${n.p[2]},${n.p[3]}" data-nom="${esc(n.p[1])}"><circle cx="${x}" cy="${y}" r="9" fill="transparent"/><circle cx="${x}" cy="${y}" r="3.5" fill="${c}"/></g>`; }).join('')}
+    ${pts.map(n => { const [x, y] = xy(n); const c = n.p[0] === 'eau' ? '#5BB8FF' : n.p[0] === 'danger' ? 'var(--danger)' : n.p[0] === 'hopital' ? '#FF2D55' : 'var(--vert)'; return `<g data-ll="${n.p[2]},${n.p[3]}" data-nom="${esc(n.p[1])}"><circle cx="${x}" cy="${y}" r="9" fill="transparent"/><circle cx="${x}" cy="${y}" r="3.5" fill="${c}"/></g>`; }).join('')}
     <circle r="6" fill="var(--accent)"/><circle r="12" fill="none" stroke="var(--accent)" opacity=".4"/>`;
 }
 
@@ -171,13 +198,13 @@ function lieuxAutour(here) { // les candidats dans le rayon du radar, recherché
   const pts = nearest(POINTS.filter(p => TYPES_DEVANT.includes(p[0])), here, 80, p => [p[2], p[3]]).filter(n => n.d < 5000)
     .map(n => ({ cle: 'p' + n.p[2] + ',' + n.p[3], ll: [n.p[2], n.p[3]], nom: n.p[1], type: TYPES[n.p[0]] }));
   const vil = nearest(COMMUNES, here, 25).filter(n => n.d < 5000)
-    .map(n => ({ cle: 'c' + n.p[1] + ',' + n.p[2], ll: [n.p[1], n.p[2]], nom: n.p[0], type: ['🏘', 'Village'] }));
+    .map(n => ({ cle: 'c' + n.p[1] + ',' + n.p[2], ll: [n.p[1], n.p[2]], nom: n.p[0], type: [pic('village', 'c-village'), 'Village'] }));
   devantPour = here; return devantLieux = [...pts, ...vil];
 }
 function majDevant() {
   if (!modeDevant) return;
   const info = $('#devantInfo'), ul = $('#devantListe'), vide = t => { info.textContent = t; ul.innerHTML = ''; devantRendu = null; };
-  if (!pos) return vide('Position inconnue : active le GPS en haut de l\'onglet. Sans position, Repère ne sait pas ce qui est devant toi.');
+  if (!pos) return vide('Position inconnue : active le GPS en haut de l\'onglet. Sans position, T’es où ? ne sait pas ce qui est devant toi.');
   if (heading == null) return vide(compasMuet ? 'Ton téléphone ne donne pas de direction (pas de boussole, ou accès aux capteurs refusé). Repasse sur « Tout autour » : le radar marche avec le nord en haut.'
     : 'Attente de la boussole… tiens le téléphone à plat, le haut vers le chemin.');
   if (devantDoigt) return; // doigt posé sur la liste : rien ne bouge sous le doigt
@@ -187,9 +214,9 @@ function majDevant() {
   const lieux = lieuxAutour(here).map(n => ({ ...n, d: distance(here, n.ll), cap: bearing(here, n.ll) })).filter(n => n.d > 80); // à moins de 80 m : on y est, la direction ne veut rien dire
   const res = devant(lieux, heading, DEMI_CONE, devantVus).slice(0, 12);
   devantVus = new Set(res.map(n => n.cle)); devantRendu = { cap: heading, ll: here };
-  info.innerHTML = `Tu vises <b>${Math.round(heading)}° · ${cardinal(heading)}</b> · lieux à ±${DEMI_CONE}° jusqu'à 5 km`;
+  info.innerHTML = t('Tu vises <b>{c}</b> · lieux à ±{a}° jusqu\'à 5 km', { c: `${Math.round(heading)}° · ${cardinal(heading)}`, a: DEMI_CONE });
   ul.innerHTML = res.map(n => `<li data-ll="${n.ll}" data-nom="${esc(n.nom)}"><span class="pastille">${n.type[0]}</span>
-    <span class="nom"><b>${esc(n.nom)}</b><span>${n.type[1]}</span></span><span class="dist">${fmtDist(n.d)}<br><small class="meta">à vol d'oiseau</small></span></li>`).join('')
+    <span class="nom"><b>${esc(n.nom)}</b><span>${n.type[1]}</span></span><span class="dist">${fmtDist(n.d)}<br><small class="meta">${t('à vol d\'oiseau')}</small></span></li>`).join('')
     || '<li class="meta">Aucun refuge, village ni point d\'eau de ce côté à moins de 5 km. Tourne-toi doucement ou repasse sur « Tout autour ».</li>';
 }
 $('#btnDevant').onclick = () => {
@@ -220,13 +247,13 @@ $('#proches').onclick = $('#radar').onclick = $('#devantListe').onclick = e => {
 function majSoleil() {
   const here = pos ? ici() : [46.6, 2.4]; // centre de la France par défaut
   const now = new Date(), s = sunTimes(now, ...here);
-  const hm = d => d ? d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—';
-  $('#soleilHeures').innerHTML = `☀ ${hm(s.rise)}<br>☾ ${hm(s.set)}`;
+  const hm = d => d ? d.toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' }) : '—';
+  $('#soleilHeures').innerHTML = `${pic('soleil')} ${hm(s.rise)}<br>${pic('lune')} ${hm(s.set)}`;
   const carte = $('.soleil');
   let txt, frac;
-  if (now < s.rise) { txt = `Jour dans ${duree(s.rise - now)}`; frac = 0; }
-  else if (now > s.set) { const demain = sunTimes(new Date(now.getTime() + 864e5), ...here); txt = `Jour dans ${duree(demain.rise - now)}`; frac = 1; }
-  else { txt = `Nuit dans ${duree(s.set - now)}`; frac = (now - s.rise) / (s.set - s.rise); }
+  if (now < s.rise) { txt = t('Jour dans {d}', { d: duree(s.rise - now) }); frac = 0; }
+  else if (now > s.set) { const demain = sunTimes(new Date(now.getTime() + 864e5), ...here); txt = t('Jour dans {d}', { d: duree(demain.rise - now) }); frac = 1; }
+  else { txt = t('Nuit dans {d}', { d: duree(s.set - now) }); frac = (now - s.rise) / (s.set - s.rise); }
   $('#nuitDans').textContent = txt;
   carte.classList.toggle('urgent', now < s.set && s.set - now < 90 * 60e3 && now > s.rise);
   $('#arcFill').style.width = frac * 100 + '%'; $('#arcSun').style.left = frac * 100 + '%';
@@ -236,10 +263,9 @@ const duree = ms => { const m = Math.round(ms / 60e3); return m < 60 ? `${m} min
 majSoleil(); setInterval(majSoleil, 60e3);
 
 // ---------- Météo (téléchargée quand il y a du réseau, lisible hors ligne) ----------
-const WMO = c => c == null ? ['', '—'] : c === 0 ? ['☀️', 'Ciel clair'] : c <= 2 ? ['🌤', 'Peu nuageux'] : c === 3 ? ['☁️', 'Couvert'] : c <= 48 ? ['🌫', 'Brouillard']
-  : c <= 57 ? ['🌦', 'Bruine'] : c <= 67 ? ['🌧', 'Pluie'] : c <= 77 ? ['🌨', 'Neige'] : c <= 82 ? ['🌦', 'Averses'] : c <= 86 ? ['🌨', 'Averses de neige'] : ['⛈', 'Orage'];
+const WMO = c => c == null ? ['', '—'] : c === 0 ? [pic('soleil'), 'Ciel clair'] : c <= 2 ? [pic('eclaircie'), 'Peu nuageux'] : c === 3 ? [pic('nuage'), 'Couvert'] : c <= 48 ? [pic('brouillard'), 'Brouillard']
+  : c <= 57 ? [pic('pluie'), 'Bruine'] : c <= 67 ? [pic('pluie'), 'Pluie'] : c <= 77 ? [pic('neige'), 'Neige'] : c <= 82 ? [pic('pluie'), 'Averses'] : c <= 86 ? [pic('neige'), 'Averses de neige'] : [pic('orage'), 'Orage'];
 const beaufort = kn => [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64].findIndex(s => kn < s) === -1 ? 12 : [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64].findIndex(s => kn < s);
-const JOURS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
 let meteoEnCours = false;
 
 async function telechargerMeteo() {
@@ -273,9 +299,9 @@ function alertesMeteo(M, i, heures = 12) {
   const a = [], fin = Math.min(M.h.time.length, i + heures);
   const raf = Math.max(...M.h.wind_gusts_10m.slice(i, fin)), vent = Math.max(...M.h.wind_speed_10m.slice(i, fin));
   const orage = M.h.weather_code.slice(i, fin).findIndex(c => c >= 95);
-  if (orage >= 0) a.push(`⛈ Orage prévu ${orage === 0 ? 'maintenant' : `dans ${orage} h`}`);
-  if (raf >= 34 || vent >= 34) a.push(`💨 Coup de vent : rafales jusqu'à ${Math.round(raf)} nœuds dans les ${heures} h`);
-  else if (vent >= 22) a.push(`💨 Vent frais (force ${beaufort(vent)}) dans les ${heures} h : prudence en mer et en crête`);
+  if (orage >= 0) a.push(t('Orage prévu {q}', { q: orage === 0 ? t('maintenant') : t('dans {n} h', { n: orage }) }));
+  if (raf >= 34 || vent >= 34) a.push(t('Coup de vent : rafales jusqu\'à {n} nœuds dans les {h} h', { n: Math.round(raf), h: heures }));
+  else if (vent >= 22) a.push(t('Vent frais (force {f}) dans les {h} h : prudence en mer et en crête', { f: beaufort(vent), h: heures }));
   const p = M.h.pressure_msl, d3 = p[Math.min(i + 3, p.length - 1)] - p[i];
   if (d3 <= -3) a.push(`↘ La pression va chuter de ${Math.abs(d3).toFixed(0)} hPa en 3 h : dégradation rapide`);
   return a;
@@ -283,7 +309,7 @@ function alertesMeteo(M, i, heures = 12) {
 function afficherMeteo() {
   const M = S.meteo; if (!M) return;
   const age = Date.now() - M.t, i = indexHeure(M);
-  $('#meteoAge').textContent = `Téléchargée il y a ${duree(age)}`;
+  $('#meteoAge').textContent = t('Téléchargée il y a {d}', { d: duree(age) });
   $('#btnMeteo').textContent = 'Mettre à jour la météo';
   if (i < 0) { $('#meteoNow').innerHTML = '<p class="meta" style="margin:0">Prévisions trop anciennes : mets-les à jour dès que tu as du réseau.</p>'; $('#meteoJours').innerHTML = ''; $('#meteoAlerte').innerHTML = ''; return; }
   const h = M.h, [ico, lib] = WMO(h.weather_code[i]), vent = h.wind_speed_10m[i];
@@ -291,10 +317,10 @@ function afficherMeteo() {
   $('#meteoCarte').className = 'carte meteo ' + (c >= 95 ? 'orage' : nuit ? 'nuit' : c >= 3 ? 'gris' : 'jour');
   const tend = h.pressure_msl[Math.min(i + 6, h.pressure_msl.length - 1)] - h.pressure_msl[i];
   const chips = [
-    `Vent ${Math.round(vent)} nd du ${cardinal(h.wind_direction_10m[i])} · force ${beaufort(vent)}`,
-    `Rafales ${Math.round(h.wind_gusts_10m[i])} nd`,
+    t('Vent {v} nd du {c} · force {f}', { v: Math.round(vent), c: cardinal(h.wind_direction_10m[i]), f: beaufort(vent) }),
+    t('Rafales {n} nd', { n: Math.round(h.wind_gusts_10m[i]) }),
     `${Math.round(h.pressure_msl[i])} hPa ${tend > 1 ? '↗' : tend < -1 ? '↘' : '→'}`,
-    `Pluie ${h.precipitation_probability[i] ?? 0} %`,
+    t('Pluie {n} %', { n: h.precipitation_probability[i] ?? 0 }),
   ];
   if (M.m) {
     const j = M.m.time.indexOf(h.time[i]);
@@ -305,7 +331,7 @@ function afficherMeteo() {
   const al = alertesMeteo(M, i);
   $('#meteoAlerte').innerHTML = al.map(x => `<div class="meteo-alerte">${x}</div>`).join('');
   const d = M.d;
-  $('#meteoJours').innerHTML = d.time.map((t, k) => `<div><b>${k === 0 ? 'auj.' : JOURS[new Date(t + 'T12:00').getDay()]}</b><i>${WMO(d.weather_code[k])[0]}</i>${Math.round(d.temperature_2m_max[k])}° / ${Math.round(d.temperature_2m_min[k])}°<br>${Math.round(d.wind_speed_10m_max[k])} nd</div>`).join('');
+  $('#meteoJours').innerHTML = d.time.map((jr, k) => `<div><b>${k === 0 ? t('auj.') : new Date(jr + 'T12:00').toLocaleDateString(LOC, { weekday: 'short' })}</b><i>${WMO(d.weather_code[k])[0]}</i>${Math.round(d.temperature_2m_max[k])}° / ${Math.round(d.temperature_2m_min[k])}°<br>${Math.round(d.wind_speed_10m_max[k])} ${t('nd')}</div>`).join('');
   $('#merBft').textContent = beaufort(vent);
 }
 afficherMeteo(); setInterval(afficherMeteo, 10 * 60e3);
@@ -328,13 +354,13 @@ function majMer() {
   if (S.profil === 'mer' && POINTS.length) {
     const [p] = nearest(POINTS.filter(x => x[0] === 'port'), here, 1, x => [x[2], x[3]]);
     const [s] = nearest(POINTS.filter(x => x[0] === 'snsm'), here, 1, x => [x[2], x[3]]);
-    $('#merPort').innerHTML = [p && `⚓ Abri le plus proche : <b>${esc(p.p[1])}</b> · ${fmtMilles(p.d)} au ${Math.round(p.cap)}°`, s && `🛟 Sauvetage SNSM : ${esc(s.p[1])} · ${fmtMilles(s.d)}`].filter(Boolean).join('<br>');
+    $('#merPort').innerHTML = [p && `${pic('ancre')} Abri le plus proche : <b>${esc(p.p[1])}</b> · ${fmtMilles(p.d)} au ${Math.round(p.cap)}°`, s && `${pic('bouee')} Sauvetage SNSM : ${esc(s.p[1])} · ${fmtMilles(s.d)}`].filter(Boolean).join('<br>');
   }
 }
 
 function hommeALaMer() {
   if (!pos) { demarrerGps(); return popup('<h2>Position en cours</h2><p>Le GPS cherche ta position. Réappuie dans quelques secondes. En attendant : crie « Un homme à la mer ! », lance une bouée, ne le quitte pas des yeux.</p>'); }
-  const h = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const h = new Date().toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
   const p = { id: Date.now().toString(36), nom: `Homme à la mer ${h}`, lat: ici()[0], lon: ici()[1], t: Date.now() };
   S.points.unshift(p); S.cible = p.id; save(); majPoints(); majBoussole();
   navigator.vibrate?.([300, 100, 300, 100, 300]);
@@ -397,7 +423,7 @@ function majBoussole() {
 }
 
 function majPoints() {
-  $('#mesPoints').innerHTML = S.points.map(p => `<li data-id="${p.id}" class="${p.id === S.cible ? 'sel' : ''}"><span><b>${esc(p.nom)}</b><br><small class="meta">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)} · ${new Date(p.t).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></span><button data-suppr="${p.id}" aria-label="Supprimer">×</button></li>`).join('')
+  $('#mesPoints').innerHTML = S.points.map(p => `<li data-id="${p.id}" class="${p.id === S.cible ? 'sel' : ''}"><span><b>${esc(p.nom)}</b><br><small class="meta">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)} · ${new Date(p.t).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></span><button data-suppr="${p.id}" aria-label="Supprimer">×</button></li>`).join('')
     || '<li class="meta" style="cursor:default">Marque ton camp, ta voiture ou une source pour pouvoir y revenir.</li>';
 }
 $('#mesPoints').onclick = e => {
@@ -453,7 +479,7 @@ majTrace();
 // ensuite il est gardé dans le téléphone et la boussole peut prendre le relais en ligne droite.
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
-const MODES = { foot: ['routed-foot', 'à pied'], bike: ['routed-bike', 'à vélo'], car: ['routed-car', 'en voiture'] };
+const MODES = { foot: ['routed-foot', t('à pied')], bike: ['routed-bike', t('à vélo')], car: ['routed-car', t('en voiture')] };
 let plan = null, moiMk = null, destMk = null, ptsMk = [], suivre = true, en3D = false;
 let destination = S.route?.dest || null, modeIti = S.route?.mode || 'car'; // voiture par défaut, comme un GPS
 const lnglat = ([la, lo]) => [lo, la];
@@ -477,7 +503,7 @@ function initPlan() {
     // Vu le 17/11 : Chrome met sur liste noire les cartes graphiques des vieux Mac (Iris Pro, GT 750M) ; Safari, lui, affiche la carte
     $('.plan-btns').hidden = true;
     return $('#plan').innerHTML = `<div class="meta" style="padding:24px;line-height:1.5"><b style="color:var(--txt)">Ce navigateur refuse d'afficher la carte</b><br>
-      Il a coupé le WebGL, souvent sur les ordinateurs anciens. Ouvre Repère dans <b>Safari</b> ou sur ton téléphone : la carte s'y affiche.<br><br>
+      Il a coupé le WebGL, souvent sur les ordinateurs anciens. Ouvre T’es où ? dans <b>Safari</b> ou sur ton téléphone : la carte s'y affiche.<br><br>
       Dans Chrome, tu peux essayer : tape <code>chrome://flags/#ignore-gpu-blocklist</code> dans la barre d'adresse, choisis « Enabled », puis relance Chrome.<br><br>
       La boussole et l'itinéraire restent disponibles ici.</div>`;
   }
@@ -513,7 +539,7 @@ function initPlan() {
     const { x, y } = e.point, alt = plan.queryRenderedFeatures([[x - 10, y - 10], [x + 10, y + 10]], { layers: ['route-alt'] })[0];
     if (alt) return choisirIti(alt.properties.i); // toucher un autre itinéraire le choisit, comme dans les GPS
     const ll = [e.lngLat.lat, e.lngLat.lng], [v] = COMMUNES.length ? nearest(COMMUNES, ll) : [];
-    choisirDest(ll, v ? `Près de ${v.p[0]} (${v.p[4]})` : 'Point sur la carte');
+    choisirDest(ll, v ? t('Près de {v}', { v: `${v.p[0]} (${v.p[4]})` }) : t('Point sur la carte'));
   });
   plan.on('dragstart', () => { suivre = false; });
   plan.on('moveend', majPointsPlan);
@@ -569,7 +595,7 @@ function demarrerGuidage() {
   navMk = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(lnglat(ici())).addTo(plan);
   $('#navBandeau').hidden = false; $('#itiChoix').hidden = true; $('#btnPlein').hidden = true; // pendant le guidage : toujours plein écran, on arrête avec la croix du bandeau vert
   if (!$('.plan-wrap').classList.contains('plein')) $('#btnPlein').click(); // plein écran, comme un GPS de voiture
-  voixEtape = { depart: true }; horsRoute = false; dire(`C'est parti vers ${S.route.dest.nom}.`, true);
+  voixEtape = { depart: true }; horsRoute = false; dire(t('C\'est parti vers {n}.', { n: S.route.dest.nom }), true);
   dessinerRoute(S.route, false); majGuidage(); cadrerGuidage();
 }
 function arreterGuidage(msg) {
@@ -618,12 +644,12 @@ function majGuidage() {
   const v = pos.coords.speed, cap = v > 2 && pos.coords.heading != null && !isNaN(pos.coords.heading) ? pos.coords.heading : capRoute;
   // Sur la route, la flèche est posée sur le tracé (comme un GPS de voiture) : elle ne tremble plus à côté
   allerVers(dmin < 25 ? proj : me, cap);
-  if (distance(me, R.dest.ll) < 30) { dire(`Tu es arrivé : ${R.dest.nom}.`); return arreterGuidage(`Tu es arrivé : ${R.dest.nom}.`); }
+  if (distance(me, R.dest.ll) < 30) { const a = t('Tu es arrivé : {n}.', { n: R.dest.nom }); dire(a); return arreterGuidage(a); }
   const fin = cumul[cumul.length - 1] - cumul[i0] + dmin;
   const prochaine = idxEtapes.find(e => e.i > i0);
   const dEtape = prochaine ? cumul[prochaine.i] - cumul[i0] + dmin : fin;
   $('#navConsigne').textContent = dmin > 60 ? 'Tu t\'écartes de l\'itinéraire : rejoins la ligne violette' : prochaine ? prochaine.t : 'Tout droit jusqu\'à l\'arrivée';
-  $('#navDist').textContent = `Dans ${fmtDist(dEtape)} · arrivée à ${fmtDist(fin)}`;
+  $('#navDist').textContent = t('Dans {d} · arrivée à {f}', { d: fmtDist(dEtape), f: fmtDist(fin) });
   annoncer(prochaine, dEtape, dmin);
 }
 // Voix du guidage : une annonce « Dans 300 mètres, … » puis la consigne au moment de tourner (distances plus longues en voiture)
@@ -635,9 +661,9 @@ function annoncer(prochaine, dEtape, dmin) {
   if (!prochaine) return;
   const vite = (pos.coords.speed || 0) > 8, proche = vite ? 200 : 40, loin = vite ? 1500 : 300;
   if (voixEtape.i !== prochaine.i) voixEtape = { i: prochaine.i };
-  if (prochaine.t === 'Tu es arrivé') { if (!voixEtape.loin && dEtape <= loin) { voixEtape.loin = true; dire(`Arrivée dans ${parleDist(dEtape)}.`); } return; } // « Tu es arrivé » est dit une seule fois, à l'arrivée
+  if (prochaine.t === t('Tu es arrivé') || prochaine.t === 'Tu es arrivé') { if (!voixEtape.loin && dEtape <= loin) { voixEtape.loin = true; dire(t('Arrivée dans {d}.', { d: parleDist(dEtape) })); } return; } // « Tu es arrivé » est dit une seule fois, à l'arrivée
   if (!voixEtape.proche && dEtape <= proche) { voixEtape.proche = voixEtape.loin = true; dire(prochaine.t); }
-  else if (!voixEtape.loin && (dEtape <= loin || voixEtape.depart)) { voixEtape.loin = true; dire(`Dans ${parleDist(dEtape)}, ${minuscule(prochaine.t)}.`); }
+  else if (!voixEtape.loin && (dEtape <= loin || voixEtape.depart)) { voixEtape.loin = true; dire(t('Dans {d}, {c}.', { d: parleDist(dEtape), c: minuscule(prochaine.t) })); }
 }
 // Flèche continue : entre deux positions GPS (environ 1 par seconde), elle glisse et tourne image par image,
 // et la caméra la suit au même rythme (plus de sauts)
@@ -668,7 +694,7 @@ function majPointsPlan() {
   const b = plan.getBounds();
   S.points.forEach(p => ptsMk.push(marqueur([p.lat, p.lon], 'plan-mien').setPopup(new maplibregl.Popup({ offset: 10 }).setText(p.nom))));
   dangersActifs().forEach(d => ptsMk.push(marqueur([d.lat, d.lon], 'plan-pt plan-danger', SIGNALES[d.type][0]).setPopup(new maplibregl.Popup({ offset: 14 })
-    .setHTML(`<b>${SIGNALES[d.type][1]}</b><br>Signalé ${d.moi ? 'par toi' : d.par ? 'par ' + esc(d.par) : 'par ton groupe'} il y a ${depuis(Date.now() - d.t)}<br><button class="btn petit" data-suppr-danger="${esc(d.id)}">Plus là : retirer</button>`))));
+    .setHTML(`<b>${SIGNALES[d.type][1]}</b><br>${t('Signalé {q} il y a {d}', { q: d.moi ? t('par toi') : d.par ? t('par {n}', { n: esc(d.par) }) : t('par ton groupe'), d: depuis(Date.now() - d.t) })}<br><button class="btn petit" data-suppr-danger="${esc(d.id)}">Plus là : retirer</button>`))));
   if (plan.getZoom() < 11) return;
   POINTS.filter(p => b.contains([p[3], p[2]])).slice(0, 300).forEach(p => {
     const [ico, lib] = TYPES[p[0]] || ['•', p[0]];
@@ -695,43 +721,68 @@ const remplir = (t, [z, x, y]) => t.replace('{z}', z).replace('{x}', x).replace(
 function majZones() {
   const z = S.zones || [];
   $('#btnZoneSuppr').hidden = !z.length;
-  if (z.length) $('#zoneInfo').textContent = `Gardé dans le téléphone : ${z.map(x => x.nom).join(', ')}. Cadre une autre zone pour l'ajouter.`;
+  if (z.length) $('#zoneInfo').textContent = t('Gardé dans le téléphone : {z}. Cadre une autre zone pour l\'ajouter.', { z: z.map(x => x.nom).join(', ') });
 }
 $('#btnZone').onclick = async () => {
   if (!plan) return;
   const info = $('#zoneInfo'), btn = $('#btnZone');
-  if (btn.disabled || $('#btnFrance').disabled) return;
-  if (!navigator.onLine) return info.textContent = 'Il faut du réseau pour télécharger la carte.';
+  if (btn.disabled || $('#btnPays').disabled) return;
+  if (!navigator.onLine) return info.textContent = t('Il faut du réseau pour télécharger la carte.');
   // En 3D la vue va jusqu'à l'horizon : on prend la zone vue du dessus
   const vue = { pitch: plan.getPitch(), bearing: plan.getBearing() };
   plan.jumpTo({ pitch: 0, bearing: 0 }); const b = plan.getBounds(); plan.jumpTo(vue);
   const vec = tuilesZone(b, 14);
-  if (vec.length > 8000) return info.textContent = `Zone trop grande pour le détail (${vec.length} morceaux) : zoome sur ton massif ou ton département, ou prends « Toute la France » en détail moyen.`;
-  const ctr = b.getCenter(), v = COMMUNES.reduce((m, x) => { const d = distance([ctr.lat, ctr.lng], [x[1], x[2]]); return d < m[1] ? [x, d] : m; }, [null, Infinity])[0];
-  await garderCarte(btn, v ? 'autour de ' + v[0] : 'zone', (tj, style) => [
+  if (vec.length > 8000) return info.textContent = t('Zone trop grande pour le détail ({n} morceaux) : zoome sur ton massif, ou prends la carte du pays entier.', { n: vec.length });
+  const ctr = b.getCenter(), [v, dv] = COMMUNES.reduce((m, x) => { const d = distance([ctr.lat, ctr.lng], [x[1], x[2]]); return d < m[1] ? [x, d] : m; }, [null, Infinity]);
+  await garderCarte(btn, v && dv < 30000 ? t('autour de {v}', { v: v[0] }) : `${ctr.lat.toFixed(2)}, ${ctr.lng.toFixed(2)}`, (tj, style) => [
     ...vec.map(t => remplir(tj.tiles[0], t)),
     // Relief avec une marge : en 3D on voit jusqu'à l'horizon et une altitude manquante est prise pour 0 m (« murs » à l'écran)
     ...tuilesZone(marge(b, 1), 9).map(t => remplir(DEM, t)), ...tuilesZone(marge(b, .3), 10, 10).map(t => remplir(DEM, t)),
     ...tuilesZone(marge(b, .1), 12, 11).map(t => remplir(DEM, t)),
     ...tuilesZone(b, 6).map(t => remplir(style.sources.ne2_shaded.tiles[0], t))]);
 };
-// Toute la France (Corse comprise) en détail moyen : routes principales, villes et villages, relief.
-// ponytail: zoom 10 ≈ 2 600 morceaux, ~300 Mo (mesuré le 17/11) ; au-delà MapLibre agrandit ces morceaux (prefetchZoomDelta). Zoom 14 partout = ~4,4 Go : trop pour un téléphone, d'où le bouton « zone » pour le détail.
-const FRANCE = () => new maplibregl.LngLatBounds([-5.2, 41.3], [9.6, 51.1]);
-$('#btnFrance').onclick = () => {
-  if (!navigator.onLine) return $('#zoneInfo').textContent = 'Il faut du réseau pour télécharger la carte.';
-  if (!confirm('Télécharger la carte de toute la France (environ 300 Mo, quelques minutes) ? Mieux vaut être en wifi.')) return;
-  garderCarte($('#btnFrance'), 'toute la France', (tj, style) => [
-    ...tuilesZone(FRANCE(), 10).map(t => remplir(tj.tiles[0], t)),
-    ...tuilesZone(FRANCE(), 8).map(t => remplir(DEM, t)),
-    ...tuilesZone(FRANCE(), 6).map(t => remplir(style.sources.ne2_shaded.tiles[0], t))]);
+// Carte d'un pays entier (data/pays.json : cadre [ouest, sud, est, nord] de 203 pays), au détail le plus fin qui tienne dans ~3 000 morceaux.
+// ponytail: France au zoom 10 ≈ 2 600 morceaux, ~300 Mo (mesuré le 17/11) → ~0,11 Mo le morceau ; les grands pays n'ont que les grandes routes (zone affichée pour le détail).
+// ponytail: cadre rectangulaire (États-Unis = 48 États contigus, sans Alaska ni Hawaï) ; un contour exact par pays si ça gêne.
+let PAYS = {};
+const nomsPays = (() => { try { return new Intl.DisplayNames([LANGUE], { type: 'region' }); } catch { return null; } })();
+const nomPays = c => { try { return nomsPays?.of(c) || c; } catch { return c; } };
+const cadre = c => { const [w, s, e, n] = PAYS[c]; return new maplibregl.LngLatBounds([w, Math.max(-85, s)], [e, Math.min(85, n)]); };
+const nbTuiles = (b, z) => { let n = 0; for (let k = 0; k <= z; k++) { const m = 2 ** k, X = lo => Math.min(m - 1, Math.floor((lo + 180) / 360 * m)), Y = la => { const r = la * Math.PI / 180; return Math.min(m - 1, Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * m)); }; n += (X(b.getEast()) - X(b.getWest()) + 1) * (Y(b.getSouth()) - Y(b.getNorth()) + 1); } return n; };
+function zoomPays(c) { let z = 6; while (z < 13 && nbTuiles(cadre(c), z + 1) <= 3000) z++; return z; }
+function majPays() {
+  const c = $('#paysChoix').value; if (!PAYS[c] || !window.maplibregl) return;
+  const z = zoomPays(c), mo = Math.max(1, Math.round(nbTuiles(cadre(c), z) * .11));
+  $('#btnPays').textContent = t('Télécharger la carte : {p} · {q} · ~{n} Mo', { p: nomPays(c), q: t(z >= 12 ? 'détail fin' : z >= 9 ? 'détail moyen' : 'grandes routes'), n: mo });
+}
+fetch('data/pays.json').then(r => r.json()).then(p => {
+  PAYS = p;
+  const ll = pos && ici(), dedans = c => ll && ll[0] >= p[c][1] && ll[0] <= p[c][3] && ll[1] >= p[c][0] && ll[1] <= p[c][2];
+  const aire = c => (p[c][2] - p[c][0]) * (p[c][3] - p[c][1]);
+  const ici_ = Object.keys(p).filter(dedans).sort((a, b) => aire(a) - aire(b))[0]; // plus petit pays qui contient ma position
+  const reg = (navigator.language.split('-')[1] || '').toUpperCase();
+  const choix = S.pays || ici_ || (p[reg] ? reg : 'FR');
+  $('#paysChoix').innerHTML = Object.keys(p).map(c => [c, nomPays(c)]).sort((a, b) => a[1].localeCompare(b[1], LOC))
+    .map(([c, n]) => `<option value="${c}"${c === choix ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  majPays();
+}).catch(() => {});
+$('#paysChoix').onchange = () => { S.pays = $('#paysChoix').value; save(); majPays(); };
+$('#btnPays').onclick = () => {
+  const c = $('#paysChoix').value; if (!PAYS[c]) return;
+  if (!navigator.onLine) return $('#zoneInfo').textContent = t('Il faut du réseau pour télécharger la carte.');
+  const z = zoomPays(c), b = cadre(c), mo = Math.max(1, Math.round(nbTuiles(b, z) * .11));
+  if (!confirm(t('Télécharger la carte de {p} (environ {n} Mo, quelques minutes) ? Mieux vaut être en wifi.', { p: nomPays(c), n: mo }))) return;
+  garderCarte($('#btnPays'), nomPays(c), (tj, style) => [
+    ...tuilesZone(b, z).map(x => remplir(tj.tiles[0], x)),
+    ...tuilesZone(b, Math.min(z - 2, 10)).map(x => remplir(DEM, x)),
+    ...tuilesZone(b, Math.min(6, z)).map(x => remplir(style.sources.ne2_shaded.tiles[0], x))]).then(majPays);
 };
 async function garderCarte(btn, nom, morceaux) {
   const info = $('#zoneInfo');
   btn.disabled = true; info.textContent = 'Préparation…';
   try {
     const [tj, style] = await Promise.all([fetch('https://tiles.openfreemap.org/planet').then(r => r.json()), fetch(STYLE).then(r => r.json())]);
-    const polices = ['Noto Sans Regular', 'Noto Sans Bold', 'Noto Sans Italic'].flatMap(f => ['0-255', '256-511', '8192-8447'].map(r => `https://tiles.openfreemap.org/fonts/${encodeURIComponent(f)}/${r}.pbf`));
+    const polices = ['Noto Sans Regular', 'Noto Sans Bold', 'Noto Sans Italic'].flatMap(f => ['0-255', '256-511', '512-767', '768-1023', '1024-1279', '1280-1535', '1536-1791', '3584-3839', '8192-8447'].map(r => `https://tiles.openfreemap.org/fonts/${encodeURIComponent(f)}/${r}.pbf`));
     const urls = [STYLE, 'https://tiles.openfreemap.org/planet', ...polices, ...['.json', '.png', '@2x.json', '@2x.png'].map(x => style.sprite + x), ...morceaux(tj, style)];
     await navigator.storage?.persist?.(); // demande au téléphone de ne pas effacer ces cartes
     const c = await caches.open(ZONES), file = [...urls];
@@ -742,13 +793,13 @@ async function garderCarte(btn, nom, morceaux) {
           const k = cleTuile(u);
           if (!(await c.match(k))) { const r = await fetch(u, { cache: 'no-store' }); if (r.ok) await c.put(k, r); else if (r.status !== 404) rate++; }
         } catch { rate++; }
-        if (++fait % 25 === 0) info.textContent = `Téléchargement de la carte… ${Math.round(fait / urls.length * 100)} %`;
+        if (++fait % 25 === 0) info.textContent = t('Téléchargement de la carte… {n} %', { n: Math.round(fait / urls.length * 100) });
       }
     }));
     S.zones = [...(S.zones || []).filter(z => z.nom !== nom), { nom, t: Date.now() }]; save(); majZones();
     const est = await navigator.storage?.estimate?.();
-    info.textContent += ` ✓ Carte prête hors ligne${est ? ` (${Math.round(est.usage / 1e6)} Mo utilisés par Repère)` : ''}${rate ? ` · ${rate} morceaux manquants, relance pour compléter` : ''}.`;
-  } catch (e) { info.textContent = 'Téléchargement interrompu : ' + e.message; }
+    info.textContent += t(' ✓ Carte prête hors ligne') + (est ? t(' ({n} Mo utilisés par T’es où ?)', { n: Math.round(est.usage / 1e6) }) : '') + (rate ? t(' · {n} morceaux manquants, relance pour compléter', { n: rate }) : '') + '.';
+  } catch (e) { info.textContent = t('Téléchargement interrompu : ') + e.message; }
   btn.disabled = false;
 }
 $('#btnZoneSuppr').onclick = async () => {
@@ -768,7 +819,7 @@ function noterTrajet(R) {
   const e = { nom: R.dest.nom, ll: R.dest.ll, d: R.d, t: R.t, mode: R.mode, date: Date.now() };
   S.trajets = [e, ...(S.trajets || []).filter(x => x.nom !== e.nom)].slice(0, 10); save();
 }
-const jour = t => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+const jour = t => new Date(t).toLocaleDateString(LOC, { day: 'numeric', month: 'short' });
 const sousTrajet = x => x.d ? `${fmtDist(x.d)} ${MODES[x.mode]?.[1] || ''} · ${duree(x.t * 1000)} · ${jour(x.date)}` : 'Kilométrage au prochain calcul';
 let menuItems = [], menuHist = false;
 function montrerMenu(items, hist, vide) {
@@ -779,10 +830,32 @@ function montrerMenu(items, hist, vide) {
 const fermerMenu = () => montrerMenu([], false);
 const menuTrajets = () => montrerMenu((S.trajets || []).map(x => ({ ...x, sous: sousTrajet(x) })), true, 'Pas encore de trajet. Cherche une ville ou touche la carte.');
 $('#destHist').onclick = e => { e.stopPropagation(); menuHist ? fermerMenu() : menuTrajets(); };
+const sousLieu = (ll, sinon) => pos ? `${fmtDist(distance(ici(), ll))} ${t('à vol d\'oiseau')}` : sinon;
+// Lieux du monde entier quand il y a du réseau (Photon, données OpenStreetMap, sans compte) ; sans réseau, les communes françaises gardées dans l'app
+async function lieuxMonde(v, n = 6) {
+  if (!navigator.onLine) return [];
+  const u = new URL('https://photon.komoot.io/api/'); u.searchParams.set('q', v); u.searchParams.set('limit', n);
+  u.searchParams.set('lang', LANGUE === 'es' ? 'default' : LANGUE); // Photon parle fr, en, de ; en espagnol : noms locaux
+  if (pos) { u.searchParams.set('lat', ici()[0].toFixed(2)); u.searchParams.set('lon', ici()[1].toFixed(2)); }
+  try {
+    const j = await fetch(u, { signal: AbortSignal.timeout(6000) }).then(r => r.json());
+    return j.features.map(f => { const p = f.properties, ll = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
+      const lieu = [p.city !== p.name && p.city, p.state, p.country].filter(Boolean).join(', ');
+      return { nom: p.name + (p.country && p.country !== p.name ? ` (${p.countrycode || p.country})` : ''), ll, sous: sousLieu(ll, lieu) + (pos && lieu ? ' · ' + lieu : '') }; });
+  } catch { return []; }
+}
+let rechercheId = 0;
 $('#dest').oninput = () => {
-  const q = norm($('#dest').value.trim()); if (q.length < 2) return fermerMenu();
-  montrerMenu(COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a)).slice(0, 8)
-    .map(c => ({ nom: nomCommune(c), ll: [c[1], c[2]], sous: pos ? `${fmtDist(distance(ici(), [c[1], c[2]]))} à vol d'oiseau` : `${c[3].toLocaleString('fr-FR')} hab.` })), false);
+  const v = $('#dest').value.trim(), q = norm(v); if (q.length < 2) return fermerMenu();
+  const communes = COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a)).slice(0, 8)
+    .map(c => ({ nom: nomCommune(c), ll: [c[1], c[2]], sous: sousLieu([c[1], c[2]], `${c[3].toLocaleString(LOC)} hab.`) }));
+  montrerMenu(communes, false);
+  const id = ++rechercheId;
+  if (q.length >= 3) setTimeout(async () => {
+    if (id !== rechercheId) return; // on tape encore
+    const monde = await lieuxMonde(v);
+    if (id === rechercheId && monde.length && $('#dest').value.trim() === v) montrerMenu([...monde, ...communes.filter(c => !monde.some(m => distance(m.ll, c.ll) < 2000))].slice(0, 8), false);
+  }, 350);
 };
 // pointerdown sans effet par défaut : le champ garde le focus, le premier toucher choisit bien la ligne (sur iPhone il fallait parfois toucher deux fois)
 $('#destMenu').addEventListener('pointerdown', e => e.preventDefault());
@@ -800,7 +873,10 @@ $('#btnIti').onclick = () => {
   const h = (S.trajets || []).find(x => x.nom === v && x.ll); if (h) return choisirDest(h.ll, h.nom); // refuge, point touché… déjà fait
   const c = COMMUNES.find(c => nomCommune(c) === v) || COMMUNES.filter(c => norm(c[0]) === q).sort((a, b) => rang(b) - rang(a))[0]
     || COMMUNES.filter(c => norm(c[0]).startsWith(q)).sort((a, b) => rang(b) - rang(a))[0];
-  if (!c) return $('#itiRes').textContent = 'Commune introuvable. Vérifie l\'orthographe ou touche la carte.';
+  if (!c) { // pas une commune française : on cherche dans le monde (avec du réseau)
+    $('#itiRes').textContent = t('Recherche du lieu…');
+    return lieuxMonde(v, 1).then(([m]) => m ? choisirDest(m.ll, m.nom) : $('#itiRes').textContent = t('Lieu introuvable. Vérifie l\'orthographe ou touche la carte.'));
+  }
   $('#dest').value = nomCommune(c);
   choisirDest([c[1], c[2]], nomCommune(c));
 };
@@ -809,6 +885,7 @@ $('#modes').onclick = e => { const b = e.target.closest('[data-mode]'); if (!b) 
 
 function choisirDest(ll, nom) {
   if (guidage) arreterGuidage();
+  $('#dest').value = ''; // le champ se vide pour la prochaine recherche ; le lieu reste dans « Mes trajets » (flèche ⌄)
   destination = { ll: ll.map(x => +x.toFixed(5)), nom };
   if (plan) { destMk?.remove(); destMk = marqueurDest(ll); }
   calculerIti();
@@ -816,14 +893,15 @@ function choisirDest(ll, nom) {
 
 const SENS = { left: 'à gauche', right: 'à droite', 'slight left': 'légèrement à gauche', 'slight right': 'légèrement à droite', 'sharp left': 'franchement à gauche', 'sharp right': 'franchement à droite', straight: 'tout droit', uturn: 'demi-tour' };
 function consigne(s) {
-  const m = s.maneuver, sens = SENS[m.modifier] || '', rue = s.name ? ` sur ${s.name}` : '';
-  if (m.type === 'depart') return `Pars${rue}`;
-  if (m.type === 'arrive') return 'Tu es arrivé';
-  if (m.type === 'roundabout' || m.type === 'rotary') return `Au rond-point, prends la ${(m.exit || 1) === 1 ? '1ʳᵉ' : m.exit + 'ᵉ'} sortie${rue}`;
-  if (m.type === 'fork') return `À la fourche, prends ${sens}${rue}`;
-  if (m.modifier === 'uturn') return `Fais demi-tour${rue}`;
-  if (m.modifier === 'straight' || !sens) return `Continue tout droit${rue}`;
-  return `Tourne ${sens}${rue}`;
+  const m = s.maneuver, sens = SENS[m.modifier] ? t(SENS[m.modifier]) : '', r = s.name ? t(' sur {n}', { n: s.name }) : '';
+  const n = m.exit || 1, e = LANGUE === 'en' ? n + ([, 'st', 'nd', 'rd'][n] || 'th') : LANGUE === 'es' ? n + 'ª' : n === 1 ? '1ʳᵉ' : n + 'ᵉ';
+  if (m.type === 'depart') return t('Pars{r}', { r });
+  if (m.type === 'arrive') return t('Tu es arrivé');
+  if (m.type === 'roundabout' || m.type === 'rotary') return t('Au rond-point, prends la {e} sortie{r}', { e, r });
+  if (m.type === 'fork') return t('À la fourche, prends {s}{r}', { s: sens, r });
+  if (m.modifier === 'uturn') return t('Fais demi-tour{r}', { r });
+  if (m.modifier === 'straight' || !sens) return t('Continue tout droit{r}', { r });
+  return t('Tourne {s}{r}', { s: sens, r });
 }
 
 // « Y aller » qui bloquait : pas de délai max (une demande pouvait pendre longtemps), 3 demandes d'un coup au serveur gratuit
@@ -835,7 +913,7 @@ async function calculerIti() {
   const id = ++calcId, dest = destination, mode = modeIti;
   const dep = pos ? ici() : plan ? [plan.getCenter().lat, plan.getCenter().lng] : null;
   if (!dep) return $('#itiRes').textContent = 'Position inconnue : active le GPS.';
-  $('#itiRes').textContent = `Calcul de l'itinéraire ${MODES[mode][1]} vers ${dest.nom}…`;
+  $('#itiRes').textContent = t('Calcul de l\'itinéraire {m} vers {d}…', { m: MODES[mode][1], d: dest.nom });
   $('#btnItiBoussole').hidden = false;
   try {
     // Le serveur gratuit ne propose qu'un trajet : on en demande deux autres qui passent par un point à gauche
@@ -869,8 +947,8 @@ async function calculerIti() {
   } catch (e) {
     if (id !== calcId) return;
     const d = distance(dep, dest.ll), raison = e.name === 'TimeoutError' ? 'le serveur ne répond pas, retouche « Y aller »' : e.message;
-    $('#itiRes').innerHTML = (navigator.onLine ? `Itinéraire impossible (${esc(raison)}).` : 'Pas de réseau : l\'itinéraire se calcule en ligne.')
-      + ` ${esc(dest.nom)} est à ${fmtDist(d)} à vol d'oiseau, direction ${cardinal(bearing(dep, dest.ll))}. La boussole peut t'y guider en ligne droite.`;
+    $('#itiRes').innerHTML = (navigator.onLine ? t('Itinéraire impossible ({r}).', { r: esc(t(raison)) }) : t('Pas de réseau : l\'itinéraire se calcule en ligne.'))
+      + t(' {n} est à {d} à vol d\'oiseau, direction {c}. La boussole peut t\'y guider en ligne droite.', { n: esc(dest.nom), d: fmtDist(d), c: cardinal(bearing(dep, dest.ll)) });
   }
 }
 function dessinerRoute(R, cadrer) {
@@ -912,7 +990,7 @@ function proposerItis() {
   const R = S.route; if (!R?.alts) return;
   const LIB = { foot: 'À pied', bike: 'À vélo', car: 'En voiture' };
   $('#itiListe').innerHTML = `<div class="chips iti-modes">${Object.keys(MODES).map(k => `<button class="chip${k === R.mode ? ' on' : ''}" data-mode2="${k}">${LIB[k]}</button>`).join('')}</div>` + R.alts.map((a, i) => `<button class="iti-option${i === R.choix ? ' on' : ''}" data-iti="${i}">
-    <span><b>${duree(a.t * 1000)}</b><small>${a.via ? 'Via ' + esc(a.via) : MODES[R.mode][1]}${i === 0 && R.alts.length > 1 ? ' · le plus rapide' : ''}</small></span><small>${fmtDist(a.d)}</small></button>`).join('');
+    <span><b>${duree(a.t * 1000)}</b><small>${a.via ? t('Via {v}', { v: esc(a.via) }) : MODES[R.mode][1]}${i === 0 && R.alts.length > 1 ? t(' · le plus rapide') : ''}</small></span><small>${fmtDist(a.d)}</small></button>`).join('');
   $('#itiGo').textContent = pos ? 'Y aller' : 'Activer le GPS';
   $('#itiChoix').hidden = false;
   if (!$('.plan-wrap').classList.contains('plein')) $('#btnPlein').click();
@@ -995,20 +1073,21 @@ $('#btnSifflet').onclick = () => {
 // ---------- Voix (synthèse vocale du téléphone, hors ligne sur iPhone et la plupart des Android) ----------
 S.voix ??= true; S.alerteDanger ??= true;
 function dire(t, urgent) {
+  t = D[t] ?? t; // phrases fixes (« Voix activée. »…) dites dans la langue choisie
   if (!S.voix || !window.speechSynthesis) return;
   if (urgent) speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(t), v = speechSynthesis.getVoices().find(v => /^fr\b/i.test(v.lang));
-  u.lang = 'fr-FR'; if (v) u.voice = v;
+  const u = new SpeechSynthesisUtterance(t), v = speechSynthesis.getVoices().find(v => v.lang.toLowerCase().startsWith(LANGUE));
+  u.lang = LOC; if (v) u.voice = v;
   speechSynthesis.speak(u);
 }
-const parleDist = m => m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} mètres` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} kilomètres`;
+const parleDist = m => m < 1000 ? t('{n} mètres', { n: Math.max(10, Math.round(m / 10) * 10) }) : t('{n} kilomètres', { n: (m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', FMT.dec) });
 function debloquerSon() {
   try { (ctx ??= new AudioContext()).resume(); } catch {}
   if (S.voix && window.speechSynthesis && !debloquerSon.fait) { debloquerSon.fait = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
 }
 addEventListener('pointerdown', debloquerSon, { once: true });
 function majVoix() {
-  $('#navVoix').textContent = S.voix ? '🔊' : '🔇'; $('#navVoix').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix');
+  $('#navVoix').innerHTML = pic(S.voix ? 'son' : 'muet'); $('#navVoix').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix');
   $('#btnVoixGps').setAttribute('aria-pressed', S.voix); $('#btnAlerteDanger').setAttribute('aria-pressed', S.alerteDanger);
 }
 majVoix();
@@ -1016,7 +1095,7 @@ $('#btnVoixGps').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (S.vo
 $('#btnAlerteDanger').onclick = () => { S.alerteDanger = !S.alerteDanger; save(); majVoix(); if (S.alerteDanger) sonnerieDanger(); };
 
 // ---------- Dangers signalés : arbre tombé, trou, obstacle… (par moi ou mon groupe), sonnerie en approchant ----------
-const SIGNALES = { arbre: ['🌲', 'Arbre tombé'], trou: ['🕳', 'Trou'], obstacle: ['🚧', 'Obstacle'], eboul: ['🪨', 'Éboulement'], eau: ['🌊', 'Passage inondé'], glace: ['🧊', 'Verglas · neige'], animal: ['🐗', 'Animal dangereux'], autre: ['⚠', 'Autre danger'] };
+const SIGNALES = { arbre: [pic('arbre'), 'Arbre tombé'], trou: [pic('trou'), 'Trou'], obstacle: [pic('obstacle'), 'Obstacle'], eboul: [pic('rochers'), 'Éboulement'], eau: [pic('vagues'), 'Passage inondé'], glace: [pic('flocon'), 'Verglas · neige'], animal: [pic('patte'), 'Animal dangereux'], autre: [pic('danger'), 'Autre danger'] };
 const VIE_DANGER = 7 * 864e5; // ponytail: un signalement compte 7 jours, ensuite on le croit réglé
 S.dangers ??= [];
 const dangersActifs = () => S.dangers.filter(d => Date.now() - d.t < VIE_DANGER);
@@ -1034,7 +1113,7 @@ document.addEventListener('click', e => {
       par: (S.fiche.surnom || S.fiche.nom || '').slice(0, 12), moi: true };
     S.dangers = [d, ...S.dangers].slice(0, 300); save(); dangersVus.add(d.id); // pas d'alerte pour celui qu'on vient de poser
     if (!NATIF && proxiOn) Proxi.danger(d); // ponytail: l'APK (Bluetooth, 13 octets) ne transmet pas encore les dangers
-    modal.close(); majPointsPlan(); dire(`${SIGNALES[d.type][1]} signalé.`);
+    modal.close(); majPointsPlan(); dire(t('{l} signalé.', { l: t(SIGNALES[d.type][1]) }));
   }
   const s = e.target.closest('[data-suppr-danger]');
   if (s) { S.dangers = S.dangers.filter(d => d.id !== s.dataset.supprDanger); save(); majPointsPlan(); }
@@ -1051,8 +1130,8 @@ function verifierDangers() {
   const me = ici(), v = pos.coords.speed || 0, seuil = v > 8 ? 500 : 150; // à pied 150 m, en voiture 500 m
   const capGps = v > 1 && pos.coords.heading != null && !isNaN(pos.coords.heading) ? pos.coords.heading : null;
   dangersFiches ??= POINTS.length ? POINTS.filter(p => p[0] === 'danger') : null; // passages délicats de refuges.info
-  const liste = [...dangersActifs().map(d => ({ id: d.id, ll: [d.lat, d.lon], lib: SIGNALES[d.type][1], ico: SIGNALES[d.type][0], qui: d.moi ? 'par toi' : d.par ? 'par ' + d.par : 'par ton groupe', t: d.t })),
-    ...(dangersFiches || []).map(p => ({ id: 'ri' + p[2] + ',' + p[3], ll: [p[2], p[3]], lib: 'Passage délicat : ' + p[1], ico: '⚠', qui: 'sur refuges.info' }))];
+  const liste = [...dangersActifs().map(d => ({ id: d.id, ll: [d.lat, d.lon], lib: t(SIGNALES[d.type][1]), ico: SIGNALES[d.type][0], qui: d.moi ? t('par toi') : d.par ? t('par {n}', { n: d.par }) : t('par ton groupe'), t: d.t })),
+    ...(dangersFiches || []).map(p => ({ id: 'ri' + p[2] + ',' + p[3], ll: [p[2], p[3]], lib: t('Passage délicat : {n}', { n: p[1] }), ico: pic('danger'), qui: t('sur refuges.info') }))];
   for (const x of liste) {
     const d = distance(me, x.ll);
     if (d > seuil * 2) { dangersVus.delete(x.id); continue; } // réarmée une fois loin
@@ -1060,9 +1139,9 @@ function verifierDangers() {
     if (capGps != null && d > 30 && ecartAngle(capGps, bearing(me, x.ll)) > 70) continue; // derrière moi : pas d'alerte
     dangersVus.add(x.id);
     sonnerieDanger(); navigator.vibrate?.([300, 120, 300, 120, 600]);
-    dire(`Attention : ${x.lib.replace(/ :.*/, '')} signalé à ${parleDist(d)}.`, true);
+    dire(t('Attention : {l} signalé à {d}.', { l: x.lib.replace(/ :.*/, ''), d: parleDist(d) }), true);
     const el = $('#alerteDanger');
-    el.innerHTML = `<span class="ico">${x.ico}</span><span><b>${esc(x.lib)}</b><small>À ${fmtDist(d)} · signalé ${esc(x.qui)}${x.t ? ' il y a ' + depuis(Date.now() - x.t) : ''}</small></span><button aria-label="Fermer">✕</button>`;
+    el.innerHTML = `<span class="ico">${x.ico}</span><span><b>${esc(x.lib)}</b><small>${t('À {d} · signalé {q}', { d: fmtDist(d), q: esc(x.qui) })}${x.t ? t(' il y a {d}', { d: depuis(Date.now() - x.t) }) : ''}</small></span><button aria-label="Fermer">✕</button>`;
     el.hidden = false; clearTimeout(alerteT); alerteT = setTimeout(() => { el.hidden = true; }, 15000);
     break;
   }
@@ -1115,7 +1194,7 @@ addEventListener('devicemotion', e => {
 });
 function alarmeChute() {
   let n = 60;
-  popup(`<h2>Chute détectée</h2><p class="big" id="chuteN">60</p><p>Tout va bien ? Sans réponse, Repère déclenche le sifflet et le SOS lumineux.</p><button class="btn primaire" id="chuteOk">Je vais bien</button>`);
+  popup(`<h2>Chute détectée</h2><p class="big" id="chuteN">60</p><p>Tout va bien ? Sans réponse, T’es où ? déclenche le sifflet et le SOS lumineux.</p><button class="btn primaire" id="chuteOk">Je vais bien</button>`);
   const t = setInterval(() => { n--; const el = $('#chuteN'); if (el) el.textContent = n; if (n % 10 === 0) bip(300, 2000); if (n <= 0) { clearInterval(t); modal.close(); ouvrir('sos'); if (!siffle) $('#btnSifflet').click(); lumiere('sos'); } }, 1000);
   $('#chuteOk').onclick = () => { clearInterval(t); modal.close(); };
   modal.addEventListener('close', () => clearInterval(t), { once: true });
@@ -1282,7 +1361,7 @@ function contexteSituation() {
   c.push(`Utilisateur : ${p}.`);
   if (pos) c.push(`Position : ${ici()[0].toFixed(4)}, ${ici()[1].toFixed(4)}${pos.coords.altitude != null ? ', altitude ' + Math.round(pos.coords.altitude) + ' m' : ''}.`);
   if (dernierVillage) c.push(`Lieu habité le plus proche : ${dernierVillage.p[0]} à ${fmtDist(dernierVillage.d)} direction ${cardinal(dernierVillage.cap)}.`);
-  c.push(`Lumière : ${$('#nuitDans').textContent}. Heure : ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`);
+  c.push(`Lumière : ${$('#nuitDans').textContent}. Heure : ${new Date().toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' })}.`);
   return c.join(' ');
 }
 
@@ -1333,7 +1412,7 @@ $('#btnDemander').onclick = async () => {
     ? `<|im_start|>system\nTu es un guide de survie. Tu donnes les gestes à faire, en français, en 3 à 5 étapes numérotées, d'après la fiche.<|im_end|>\n${hist}<|im_start|>user\nFiche :\n${base}\n\n${contexteSituation()}\n\nQuestion : ${q}<|im_end|>\n<|im_start|>assistant\n1.`
     : `<|im_start|>system\nTu es un guide de survie. Réponds en français, en 2 ou 3 phrases courtes, concrètes et exactes. Si tu ne sais pas, dis-le.<|im_end|>\n${hist}<|im_start|>user\n${q}<|im_end|>\n<|im_start|>assistant\n`;
   // Avant le premier mot, l'IA lit (sur le processeur, ça peut prendre une minute) : un compteur montre qu'elle travaille.
-  x.attente = `${base ? 'Repère lit la fiche' : 'Repère réfléchit'}…`; afficherFil(true);
+  x.attente = `${base ? 'T’es où ? lit la fiche' : 'T’es où ? réfléchit'}…`; afficherFil(true);
   iaOccupee = true; $('#btnDemander').disabled = true;
   const t0 = Date.now(), chrono = setInterval(() => {
     const el = $('#iaTexte'), s = Math.round((Date.now() - t0) / 1000);
@@ -1382,7 +1461,7 @@ $('#btnBivouac').onclick = () => {
     <div id="verdict"></div>
     <p class="meta">Coche ce qui correspond à ton emplacement.</p>
     ${DANGERS.map(([k, t]) => `<div class="qr"><span>${t}</span><button class="switch" data-danger="${k}" aria-pressed="false"></button></div>`).join('')}
-    ${auto.length ? '<div class="k" style="margin-top:14px">Repère a aussi vérifié</div><ul class="liste">' + auto.map(a => `<li>${a[1]}</li>`).join('') + '</ul>' : ''}`);
+    ${auto.length ? '<div class="k" style="margin-top:14px">T’es où ? a aussi vérifié</div><ul class="liste">' + auto.map(a => `<li>${a[1]}</li>`).join('') + '</ul>' : ''}`);
   const calc = () => {
     const on = $$('[data-danger][aria-pressed="true"]').map(b => DANGERS.find(d => d[0] === b.dataset.danger));
     const max = Math.max(0, ...on.map(d => d[2]), ...auto.map(a => a[0]));
@@ -1461,7 +1540,7 @@ $('#btnStudio') && ($('#btnStudio').onclick = () => { S.studio = !S.studio; save
 $('#btnRouge').onclick = () => { S.theme = S.theme === 'rouge' ? '' : 'rouge'; save(); appliquerTheme(); };
 appliquerTheme();
 
-// ---------- Repère à proximité : Bluetooth (application Android) ou réseau cellulaire (version web, iPhone) ----------
+// ---------- T’es où ? à proximité : Bluetooth (application Android) ou réseau cellulaire (version web, iPhone) ----------
 // Par le réseau, les positions passent par le relais public ntfy.sh, chiffrées avec le code du groupe :
 // le relais ne voit qu'un message illisible. ponytail: relais gratuit à débit limité, serveur ntfy à soi si l'app grossit.
 const RELAIS = 'https://ntfy.sh/';
@@ -1566,7 +1645,7 @@ function majVoisins() {
     return `<li class="${v.statut === 1 ? 'alerte' : ''}"><span class="pastille">${v.statut === 1 ? 'SOS' : esc((v.nom || '?').slice(0, 2))}</span>
       <span class="nom"><b>${esc(v.nom || 'Anonyme')}${v.statut === 1 ? ' · demande de l\'aide' : ''}</b><span>${decrireVoisin(v)}</span></span>
       <span class="dist">${cap != null ? `<svg data-cap="${cap}" style="transform:rotate(${cap - (heading ?? 0)}deg)"><use href="#i-fleche"/></svg>` : ''}<br><small class="meta">il y a ${depuis(now - v.vu)}</small></span></li>`;
-  }).join('') : `<li class="meta">${proxiOn ? `Recherche… Les autres doivent avoir Repère ouvert avec « Repérer les autres » activé${NATIF ? '' : ' et le même code de groupe'}.`
+  }).join('') : `<li class="meta">${proxiOn ? `Recherche… Les autres doivent avoir T’es où ? ouvert avec « Repérer les autres » activé${NATIF ? '' : ' et le même code de groupe'}.`
     : NATIF ? 'Personne pour l\'instant.' : 'Avec les données cellulaires : choisis un code de groupe et donne-le à tes proches. Vous vous voyez à n\'importe quelle distance, positions chiffrées.'}</li>`;
 }
 function depuis(ms) {
@@ -1638,7 +1717,7 @@ $('#radios').onclick = e => {
     lecteur.crossOrigin = radioOn === 'europe1' ? null : 'anonymous';
     lecteur.src = STATIONS[radioOn][1];
     lecteur.play().catch(() => majRadio('Lecture refusée : touche à nouveau la station'));
-    if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: STATIONS[radioOn][0], artist: 'Repère · radio' });
+    if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: STATIONS[radioOn][0], artist: 'T’es où ? · radio' });
   }
   majRadio();
 };
@@ -1646,7 +1725,7 @@ lecteur.onwaiting = () => radioOn && majRadio('Chargement…');
 lecteur.onplaying = () => majRadio();
 lecteur.onerror = () => radioOn && majRadio('Pas de réseau : radio indisponible');
 
-// ---------- Mode survie : Repère prend les choses en main ----------
+// ---------- Mode survie : T’es où ? prend les choses en main ----------
 let survie = false, coachT = 0, derniereGorgee = Date.now(), refusConsignes = new Set();
 let batterie = null;
 navigator.getBattery?.().then(b => batterie = b).catch(() => {});
@@ -1697,10 +1776,14 @@ function coach() {
 
 // ---------- Premier lancement : avertissement de sécurité, âge et conditions (une fois) ----------
 if (S.averti !== '2026-11-19') {
-  popup(`<div class="k">Avant de commencer</div><h2>Repère t'aide, il ne te sauve pas</h2>
-    <p><b>En danger, appelle le 112.</b> Repère ne prévient pas les secours à ta place. Les refuges, dangers, itinéraires, la météo et les réponses de l'IA peuvent être faux ou anciens : vérifie sur place et garde une carte et une boussole.</p>
+  popup(`<div class="k">Avant de commencer</div><h2>T’es où ? t'aide, il ne te sauve pas</h2>
+    <p><b>En danger, appelle le 112.</b> T’es où ? ne prévient pas les secours à ta place. Les refuges, dangers, itinéraires, la météo et les réponses de l'IA peuvent être faux ou anciens : vérifie sur place et garde une carte et une boussole.</p>
     <p>Utilisation seul à partir de 15 ans ; avant, avec l'accord d'un parent. Ne touche pas ton téléphone en conduisant.</p>
     <p class="note">En continuant, tu acceptes les <a href="legal.html#cgu" target="_blank" rel="noopener">conditions d'utilisation</a>. Tes données restent dans ton téléphone : <a href="legal.html#confidentialite" target="_blank" rel="noopener">confidentialité</a>.</p>
     <button class="btn primaire large" id="btnAverti">J'ai compris</button>`);
   $('#btnAverti').onclick = () => { S.averti = '2026-11-19'; save(); modal.close(); };
 }
+
+// Choix de la langue (onglet Moi) : l'app se recharge dans la nouvelle langue
+$('#langue').value = LANGUE;
+$('#langue').onchange = () => { S.langue = $('#langue').value; save(); location.reload(); };

@@ -26,10 +26,11 @@ export function nearest(list, here, k = 1, getLL = p => [p[1], p[2]]) {
 }
 
 export const CARDINAUX = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+export const FMT = { dec: ',' }; // séparateur décimal (« . » en anglais), réglé par app.js
 export const cardinal = deg => CARDINAUX[Math.round(deg / 45) % 8];
 
 export function fmtDist(m) {
-  return m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`;
+  return m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', FMT.dec)} km`;
 }
 
 export function dms(v, pos, neg) {

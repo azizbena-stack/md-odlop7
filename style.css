@@ -3,7 +3,7 @@
 :root {
   --bg: #F2F2F7; --bg2: rgba(118, 118, 128, .12); --surface: #FFFFFF; --surface2: #FFFFFF; --ligne: rgba(60, 60, 67, .14);
   --txt: #000000; --txt2: #6C6C70; --txt3: #AEAEB2;
-  --accent: #007AFF; --accent2: #007AFF; --ambre: #FF9500; --ok: #248A3D; --vert: #34C759; --warn: #C93400; --danger: #FF3B30;
+  --accent: #007AFF; --accent2: #007AFF; --ambre: #FF3B30; --ok: #248A3D; --vert: #34C759; --warn: #D70015; --danger: #FF3B30;
   --barre: rgba(249, 249, 251, .78); --verre-bord: rgba(255, 255, 255, .6);
   --ombre: 0 1px 2px rgba(0, 0, 0, .04), 0 6px 20px rgba(0, 0, 0, .05);
   --r: 22px; --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -14,7 +14,7 @@
   :root:not([data-theme="rouge"]) {
     --bg: #000000; --bg2: rgba(118, 118, 128, .24); --surface: #1C1C1E; --surface2: #1C1C1E; --ligne: rgba(84, 84, 88, .55);
     --txt: #FFFFFF; --txt2: #98989F; --txt3: #636366;
-    --accent: #0A84FF; --accent2: #0A84FF; --ambre: #FF9F0A; --ok: #30D158; --vert: #30D158; --warn: #FF9F0A; --danger: #FF453A;
+    --accent: #0A84FF; --accent2: #0A84FF; --ambre: #FF453A; --ok: #30D158; --vert: #30D158; --warn: #FF453A; --danger: #FF453A;
     --barre: rgba(30, 30, 32, .72); --verre-bord: rgba(255, 255, 255, .1); --ombre: none;
     color-scheme: dark;
   }
@@ -23,7 +23,7 @@
 :root.survie:not([data-theme="rouge"]) {
   --bg: #000000; --bg2: rgba(118, 118, 128, .24); --surface: #1C1C1E; --surface2: #1C1C1E; --ligne: rgba(84, 84, 88, .55);
   --txt: #FFFFFF; --txt2: #98989F; --txt3: #636366;
-  --accent: #0A84FF; --accent2: #0A84FF; --ambre: #FF9F0A; --ok: #30D158; --vert: #30D158; --warn: #FF9F0A; --danger: #FF453A;
+  --accent: #0A84FF; --accent2: #0A84FF; --ambre: #FF453A; --ok: #30D158; --vert: #30D158; --warn: #FF453A; --danger: #FF453A;
   --barre: rgba(30, 30, 32, .72); --verre-bord: rgba(255, 255, 255, .1); --ombre: none;
   color-scheme: dark;
 }
@@ -103,7 +103,7 @@ main { max-width: 560px; margin: 0 auto; padding: 0 16px; }
 /* Soleil */
 .soleil-heures { text-align: right; font-size: 14px; color: var(--txt2); line-height: 1.7; }
 .arc { position: relative; height: 6px; background: var(--bg2); border-radius: 99px; margin-top: 18px; overflow: visible; }
-.arc-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: linear-gradient(90deg, #FF9500, #FFCC00); }
+.arc-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: linear-gradient(90deg, #FF3B30, #FF6A5C); }
 .arc-sun { position: absolute; top: 50%; left: 0; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #FFCC00; box-shadow: 0 0 0 4px rgba(255, 204, 0, .25), 0 0 16px rgba(255, 179, 0, .8); }
 .soleil.urgent .big { color: var(--ambre); }
 
@@ -282,7 +282,7 @@ dialog .btn { width: 100%; }
 .verdict { border-radius: 18px; padding: 16px; margin: 14px 0; font-weight: 500; }
 .verdict b { display: block; font-size: 22px; font-weight: 700; }
 .verdict.vert { background: rgba(52, 199, 89, .14); color: var(--ok); }
-.verdict.orange { background: rgba(255, 149, 0, .14); color: var(--warn); }
+.verdict.orange { background: rgba(255, 59, 48, .14); color: var(--warn); }
 .verdict.rouge { background: rgba(255, 59, 48, .12); color: var(--danger); }
 .qr { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: .5px solid var(--ligne); font-size: 16px; }
 .metro { display: grid; place-items: center; width: 140px; height: 140px; margin: 16px auto; border-radius: 50%; background: var(--bg2); font: 600 32px var(--font); }
@@ -303,7 +303,7 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 .credits { color: var(--txt2); font-size: 12px; text-align: center; margin: 20px 8px; }
 
 /* Coach (mode survie) : bannière qui prend l'attention */
-.coach { margin: 12px 16px; max-width: 528px; padding: 18px; border-radius: var(--r); background: linear-gradient(135deg, #FF9500, #FF5E3A); color: #fff; box-shadow: 0 14px 34px -14px rgba(255, 110, 30, .8); }
+.coach { margin: 12px 16px; max-width: 528px; padding: 18px; border-radius: var(--r); background: linear-gradient(135deg, #FF3B30, #D70040); color: #fff; box-shadow: 0 14px 34px -14px rgba(255, 45, 60, .8); }
 @media (min-width: 592px) { .coach { margin: 12px auto; } }
 .coach-k { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, .85); }
 .coach-msg { font-size: 22px; font-weight: 700; line-height: 1.2; margin-top: 4px; }
@@ -401,7 +401,7 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 :root.studio:not([data-theme="rouge"]) {
   --bg: #1C1C1E; --bg2: rgba(255, 255, 255, .07); --surface: #2A2A2D; --surface2: #323236; --ligne: rgba(255, 255, 255, .09);
   --txt: #EDEDEF; --txt2: #A1A1A8; --txt3: #6E6E75;
-  --accent: #35C2A0; --accent2: #9B6BFF; --ambre: #F5A623; --ok: #35C2A0; --vert: #35C2A0; --warn: #F5A623; --danger: #FF5A5F;
+  --accent: #35C2A0; --accent2: #9B6BFF; --ambre: #FF5A5F; --ok: #35C2A0; --vert: #35C2A0; --warn: #FF5A5F; --danger: #FF5A5F;
   --barre: rgba(40, 40, 43, .82); --verre-bord: rgba(255, 255, 255, .08);
   --ombre: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 12px 30px -14px rgba(0, 0, 0, .7); --r: 14px;
   color-scheme: dark;
@@ -475,3 +475,25 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 .alerte-danger small { display: block; font-size: 13px; opacity: .9; }
 .alerte-danger button { border: 0; background: rgba(255, 255, 255, .22); color: #fff; width: 32px; height: 32px; border-radius: 50%; flex: none; }
 .plan-danger { background: #E5331F; border-radius: 50%; font-size: 15px; }
+/* Fenêtres : le contenu défile, « Fermer » et la croix restent toujours visibles */
+dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+#modalBody { overflow-y: auto; min-height: 0; flex: 1; margin: 0 -4px; padding: 0 4px; -webkit-overflow-scrolling: touch; }
+#modalFermer { flex: none; margin: 14px 0 0; }
+.modal-x { position: absolute; top: 14px; right: 14px; z-index: 2; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--bg2); color: var(--txt2); font-size: 15px; cursor: pointer; }
+dialog { position: fixed; }
+#modalBody > :first-child { padding-right: 40px; }
+/* Icônes dessinées */
+.ic { width: 1.15em; height: 1.15em; vertical-align: -.2em; flex: none; }
+.proches .pastille .ic { width: 21px; height: 21px; }
+.c-eau { color: #32ADE6; } .c-refuge { color: var(--vert); } .c-gite { color: #5E5CE6; } .c-abri { color: #A2845E; }
+.c-hopital { color: #FF2D55; } .c-danger { color: var(--danger); } .c-port { color: var(--accent); } .c-village { color: var(--txt2); }
+.plan-pt { display: grid; place-items: center; background: #fff; border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+.plan-pt .ic { width: 16px; height: 16px; }
+.plan-danger .ic { color: #fff; }
+.grille-danger .tuile b { color: var(--danger); }
+.grille-danger .tuile .ic { width: 28px; height: 28px; }
+.alerte-danger .ic, .meteo-now .ic { width: 1em; height: 1em; }
+.nav-bandeau button .ic { width: 18px; height: 18px; vertical-align: middle; }
+#meteoJours i .ic { width: 22px; height: 22px; }
+.pays-choix { width: 100%; margin-top: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--ligne); background: var(--bg2); color: inherit; font: inherit; }
+.row .pays-choix { width: auto; margin-top: 0; }

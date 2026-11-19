@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Repère · Survie hors réseau</title>
+<title>T’es où ? · Survie hors réseau</title>
 <meta name="description" content="Survie, orientation et secours, sans internet. Toute la France.">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F2F2F7">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-512.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Repère">
+<meta name="apple-mobile-web-app-title" content="T’es où ?">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -25,18 +25,47 @@
   <symbol id="i-moi" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21a8 8 0 0 1 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-carte" viewBox="0 0 24 24"><path d="M9 4L3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5z M9 4v13.5 M15 6.5V20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
   <symbol id="i-fleche" viewBox="0 0 24 24"><path d="M12 2l7 19-7-4-7 4z" fill="currentColor"/></symbol>
+  <symbol id="i-goutte" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.5 4.6 6 8.1 6 11a6 6 0 0 1-12 0c0-2.9 2.5-6.4 6-11z"/><path d="M9.5 15a2.5 2.5 0 0 0 2.5 2.5"/></symbol>
+  <symbol id="i-cabane" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-refuge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l6.5-11L13 15"/><path d="M10 20l5.5-9 5.5 9z"/><path d="M15.5 11V5l3 1.2-3 1.2"/><path d="M2 20h20"/></symbol>
+  <symbol id="i-gite" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19V7"/><path d="M3 14h18v5"/><path d="M21 14v-1.5A3.5 3.5 0 0 0 17.5 9H11v5"/><circle cx="7" cy="11" r="1.8"/></symbol>
+  <symbol id="i-abri" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20l7-13 4 6 2-3 7 10z"/><path d="M7.5 20a2.5 3 0 0 1 5 0"/></symbol>
+  <symbol id="i-hopital" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id="i-danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4.3L2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4.5"/><path d="M12 17.5v.01" stroke-width="2.6"/></symbol>
+  <symbol id="i-ancre" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v14"/><path d="M5 13a7 7 0 0 0 14 0"/><path d="M8.5 10h7"/></symbol>
+  <symbol id="i-bouee" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M5.6 5.6l3.6 3.6M14.8 14.8l3.6 3.6M18.4 5.6l-3.6 3.6M9.2 14.8l-3.6 3.6"/></symbol>
+  <symbol id="i-village" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"/><path d="M4 20v-7l4-3.5 4 3.5v7"/><path d="M12 20V10l4-3.5 4 3.5v10"/><path d="M7 20v-3h2v3"/></symbol>
+  <symbol id="i-arbre" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21h20"/><path d="M5 19l7.5-4.5"/><circle cx="16" cy="11.5" r="4.5"/><path d="M8 21l1-2.5"/></symbol>
+  <symbol id="i-trou" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="14" rx="9.5" ry="4.5"/><ellipse cx="12" cy="15" rx="5" ry="2" fill="currentColor"/></symbol>
+  <symbol id="i-obstacle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7" width="19" height="6.5" rx="1.5"/><path d="M8 7l-3 6.5M14 7l-3 6.5M20 7l-3 6.5"/><path d="M6 13.5V20M18 13.5V20"/></symbol>
+  <symbol id="i-rochers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 19.5l2.5-6 4-2.5 3.5 3-1 5.5z"/><path d="M12 19.5l2-8 4.5-2.5 3 5.5-1 5z"/><path d="M2 19.5h20"/></symbol>
+  <symbol id="i-vagues" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0"/><path d="M2 13c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0"/><path d="M2 18c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0"/></symbol>
+  <symbol id="i-flocon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/><path d="M9 3.5l3 2.5 3-2.5M9 20.5l3-2.5 3 2.5"/></symbol>
+  <symbol id="i-patte" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12.5c-2.6 0-4.8 2.7-4.8 5 0 1.6 1.3 2.5 2.8 2.5 .8 0 1.4-.4 2-.4s1.2.4 2 .4c1.5 0 2.8-.9 2.8-2.5 0-2.3-2.2-5-4.8-5z"/><circle cx="5.5" cy="10.5" r="1.8"/><circle cx="18.5" cy="10.5" r="1.8"/><circle cx="9" cy="5.5" r="1.8"/><circle cx="15" cy="5.5" r="1.8"/></symbol>
+  <symbol id="i-soleil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"/></symbol>
+  <symbol id="i-eclaircie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5V4M3.4 4.4l1 1M2 9h1.5M12.6 4.4l-1 1"/><path d="M11.2 8.1A4 4 0 0 0 4.6 11"/><path d="M9 20h9a3.5 3.5 0 0 0 .5-7A5 5 0 0 0 8.8 14a3 3 0 0 0 .2 6z"/></symbol>
+  <symbol id="i-nuage" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 19h10a4 4 0 0 0 .6-8A6 6 0 0 0 6.2 12 3.5 3.5 0 0 0 7 19z"/></symbol>
+  <symbol id="i-brouillard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14h10a4 4 0 0 0 .6-8A6 6 0 0 0 6.2 7 3.5 3.5 0 0 0 7 14z" opacity=".55"/><path d="M3 17h18M6 21h12"/></symbol>
+  <symbol id="i-pluie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14h10a4 4 0 0 0 .6-8A6 6 0 0 0 6.2 7 3.5 3.5 0 0 0 7 14z"/><path d="M8.5 17.5l-1 3M12.5 17.5l-1 3M16.5 17.5l-1 3"/></symbol>
+  <symbol id="i-neige" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14h10a4 4 0 0 0 .6-8A6 6 0 0 0 6.2 7 3.5 3.5 0 0 0 7 14z"/><path d="M8 18v.01M12 19.5v.01M16 18v.01M10 22v.01M14 22v.01" stroke-width="2.8"/></symbol>
+  <symbol id="i-orage" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14h10a4 4 0 0 0 .6-8A6 6 0 0 0 6.2 7 3.5 3.5 0 0 0 7 14z"/><path d="M13 14.5L10 18.5h4L11 22.5"/></symbol>
+  <symbol id="i-vent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10.5A2.75 2.75 0 1 0 10.75 5.25"/><path d="M3 12h15.5a2.75 2.75 0 1 1-2.75 2.75"/><path d="M3 16h7"/></symbol>
+  <symbol id="i-lune" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+  <symbol id="i-son" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M16 9a4.2 4.2 0 0 1 0 6M18.8 6.5a8 8 0 0 1 0 11"/></symbol>
+  <symbol id="i-muet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></symbol>
+  <symbol id="i-reseau" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-3M10 20v-7M15 20V9M20 20V4"/></symbol>
 </svg>
 
 <header class="top">
   <div class="brand">
     <img src="icon.svg" alt="" width="34" height="34">
-    <div><b>Repère</b><small id="etatReseau">Hors réseau prêt</small></div>
+    <div><b>T’es où ?</b><small id="etatReseau">Hors réseau prêt</small></div>
   </div>
   <button id="btnSurvie" class="survie-toggle" aria-pressed="false"><span class="dot"></span>Mode survie</button>
 </header>
 
 <div id="coach" class="coach" hidden>
-  <div class="coach-k">Repère te guide</div>
+  <div class="coach-k">T’es où ? te guide</div>
   <div id="coachMsg" class="coach-msg"></div>
   <div class="coach-actions" id="coachActions"></div>
 </div>
@@ -73,7 +102,7 @@
     <div id="meteoNow" class="meteo-now"></div>
     <div class="meteo-jours" id="meteoJours"></div>
     <button class="btn petit" id="btnMeteo" style="margin-top:12px">Télécharger la météo</button>
-    <p class="meta" style="margin:10px 0 0">📶 Mise à jour : il faut du réseau (wifi ou 4G/5G), pas possible hors connexion. <b>Mets-la à jour avant le départ</b> : ensuite, les prévisions sur 7 jours restent lisibles sans réseau.</p>
+    <p class="meta" style="margin:10px 0 0"><svg class="ic"><use href="#i-reseau"/></svg> Mise à jour : il faut du réseau (wifi ou 4G/5G), pas possible hors connexion. <b>Mets-la à jour avant le départ</b> : ensuite, les prévisions sur 7 jours restent lisibles sans réseau.</p>
   </div>
 
   <div class="carte">
@@ -91,7 +120,7 @@
   </div>
 
   <div class="carte proxi" id="proxiCarte">
-    <div class="row"><div class="k">Repère à proximité</div><span class="meta" id="proxiEtat">Sans réseau · Bluetooth</span></div>
+    <div class="row"><div class="k">T’es où ? à proximité</div><span class="meta" id="proxiEtat">Sans réseau · Bluetooth</span></div>
     <ul class="proches" id="proxiListe"></ul>
     <div class="grille2" style="margin:12px 0 0">
       <button class="btn primaire" id="btnProxi" style="margin:0">Repérer les autres</button>
@@ -105,7 +134,7 @@
     <div class="meta devant-info" id="devantInfo" hidden></div>
     <ul class="proches" id="proches"></ul>
     <ul class="proches" id="devantListe" hidden></ul>
-    <button class="btn petit" id="btnDanger" style="margin-top:10px">⚠ Signaler un danger ici</button>
+    <button class="btn petit" id="btnDanger" style="margin-top:10px"><svg class="ic"><use href="#i-danger"/></svg> Signaler un danger ici</button>
   </div>
 
   <div class="grille2">
@@ -127,8 +156,8 @@
     <div id="plan"></div>
     <div class="nav-bandeau" id="navBandeau" hidden>
       <div><b id="navConsigne"></b><small id="navDist"></small></div>
-      <button id="navDanger" aria-label="Signaler un danger ici">⚠</button>
-      <button id="navVoix" aria-label="Couper la voix">🔊</button>
+      <button id="navDanger" aria-label="Signaler un danger ici"><svg class="ic"><use href="#i-danger"/></svg></button>
+      <button id="navVoix" aria-label="Couper la voix"><svg class="ic"><use href="#i-son"/></svg></button>
       <button id="navStop" aria-label="Arrêter le guidage">✕</button>
     </div>
     <div class="plan-bas">
@@ -149,7 +178,9 @@
     <div class="k">Carte hors ligne</div>
     <p class="meta" id="zoneInfo">Cadre la zone de ta sortie sur la carte, puis télécharge-la : elle restera lisible sans réseau, en 2D comme en 3D.</p>
     <button class="btn large primaire" id="btnZone" style="margin-top:10px">Télécharger la zone affichée</button>
-    <button class="btn large" id="btnFrance" style="margin-top:10px">Toute la France · détail moyen · ~300 Mo</button>
+    <div class="k" style="margin-top:16px">Carte d'un pays entier</div>
+    <select id="paysChoix" class="pays-choix" aria-label="Pays"></select>
+    <button class="btn large" id="btnPays" style="margin-top:10px">Carte d'un pays entier</button>
     <button class="btn petit" id="btnZoneSuppr" hidden style="margin-top:10px">Effacer les cartes téléchargées</button>
   </div>
   <div class="carte" id="allerA">
@@ -277,7 +308,7 @@
   <div class="carte">
     <div class="k">Fiche médicale</div>
     <label>Nom<input data-fiche="nom"></label>
-    <label>Surnom visible par les Repère proches (4 lettres)<input data-fiche="surnom" maxlength="4" placeholder="AZIZ" style="text-transform:uppercase"></label>
+    <label>Surnom visible par les téléphones proches (4 lettres)<input data-fiche="surnom" maxlength="4" placeholder="AZIZ" style="text-transform:uppercase"></label>
     <div class="grille2"><label>Groupe sanguin<input data-fiche="sang" placeholder="O+"></label><label>Né(e) le<input data-fiche="naissance" type="date"></label></div>
     <label>Allergies<input data-fiche="allergies"></label>
     <label>Traitements<input data-fiche="traitements"></label>
@@ -305,6 +336,10 @@
     <button class="switch" id="btnAlerteDanger" aria-pressed="true"></button>
   </div>
   <div class="carte row">
+    <div><b>Langue</b><div class="meta">Language · Idioma</div></div>
+    <select id="langue" class="pays-choix" aria-label="Langue · Language · Idioma"><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
+  </div>
+  <div class="carte row">
     <div><b>Style Studio</b><div class="meta">Sombre, épuré, animé, façon logiciel de création</div></div>
     <button class="switch" id="btnStudio" aria-pressed="false"></button>
   </div>
@@ -312,7 +347,7 @@
     <div><b>Mode nuit rouge</b><div class="meta">Tout l'écran en rouge, pour ne pas t'éblouir</div></div>
     <button class="switch" id="btnRouge" aria-pressed="false"></button>
   </div>
-  <p class="credits">Données : communes © État français (geo.api.gouv.fr) · refuges et points d'eau © refuges.info (CC BY-SA) · hôpitaux © contributeurs OpenStreetMap (ODbL) · Repère ne remplace pas les secours ni une formation.<br><a href="legal.html" target="_blank" rel="noopener">Mentions légales · conditions · confidentialité · licences</a><br><span id="version"></span></p>
+  <p class="credits">Données : communes © État français (geo.api.gouv.fr) · refuges et points d'eau © refuges.info (CC BY-SA) · hôpitaux © contributeurs OpenStreetMap (ODbL) · T’es où ? ne remplace pas les secours ni une formation.<br><a href="legal.html" target="_blank" rel="noopener">Mentions légales · conditions · confidentialité · licences</a><br><span id="version"></span></p>
 </section>
 </main>
 <div class="alerte-danger" id="alerteDanger" role="alert" hidden></div>
@@ -326,7 +361,7 @@
 </nav>
 
 <div id="lum" class="lum" hidden><video id="lumVideo" playsinline muted autoplay hidden></video><div class="lum-txt" id="lumTxt"></div><div class="lum-info" id="lumInfo"></div><button id="lumStop">Appuie pour arrêter</button></div>
-<dialog id="modal"><div id="modalBody"></div><button class="btn" id="modalFermer">Fermer</button></dialog>
+<dialog id="modal"><button class="modal-x" id="modalX" aria-label="Fermer">✕</button><div id="modalBody"></div><button class="btn" id="modalFermer">Fermer</button></dialog>
 
 <script src="vendor/maplibre-gl.js"></script>
 <script type="module" src="app.js"></script>

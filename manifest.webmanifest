@@ -1,6 +1,6 @@
 {
-  "name": "Repère · Survie hors réseau",
-  "short_name": "Repère",
+  "name": "T’es où ? · Survie hors réseau",
+  "short_name": "T’es où ?",
   "description": "Survie, orientation et secours, sans internet. Toute la France.",
   "start_url": "./",
   "scope": "./",
