@@ -303,7 +303,7 @@ function alertesMeteo(M, i, heures = 12) {
   if (raf >= 34 || vent >= 34) a.push(t('Coup de vent : rafales jusqu\'à {n} nœuds dans les {h} h', { n: Math.round(raf), h: heures }));
   else if (vent >= 22) a.push(t('Vent frais (force {f}) dans les {h} h : prudence en mer et en crête', { f: beaufort(vent), h: heures }));
   const p = M.h.pressure_msl, d3 = p[Math.min(i + 3, p.length - 1)] - p[i];
-  if (d3 <= -3) a.push(`↘ La pression va chuter de ${Math.abs(d3).toFixed(0)} hPa en 3 h : dégradation rapide`);
+  if (d3 <= -3) a.push(t('↘ La pression va chuter de {n} hPa en 3 h : dégradation rapide', { n: Math.abs(d3).toFixed(0) }));
   return a;
 }
 function afficherMeteo() {
@@ -425,7 +425,22 @@ function majBoussole() {
 function majPoints() {
   $('#mesPoints').innerHTML = S.points.map(p => `<li data-id="${p.id}" class="${p.id === S.cible ? 'sel' : ''}"><span><b>${esc(p.nom)}</b><br><small class="meta">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)} · ${new Date(p.t).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></span><button data-suppr="${p.id}" aria-label="Supprimer">×</button></li>`).join('')
     || '<li class="meta" style="cursor:default">Marque ton camp, ta voiture ou une source pour pouvoir y revenir.</li>';
+  // Moi › Mon point de retour : le point choisi (ou le dernier marqué)
+  const p = S.points.find(x => x.id === S.cible) || S.points[0];
+  $('#retourInfo').textContent = p ? t('Point de retour : {n}, marqué le {d}.', { n: p.nom, d: new Date(p.t).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })
+    : t('Marque ton camp, ta voiture ou une source : la boussole t\'y ramènera, même sans réseau.');
+  $('#btnRevenir').disabled = !p;
 }
+$('#btnMarquerMoi').onclick = () => {
+  if (pos) return $('#btnMarquer').click();
+  if (!watchId) demarrerGps();
+  $('#retourInfo').textContent = t('Recherche du GPS… touche à nouveau « Marquer ce point » dans quelques secondes.');
+};
+// Revenir : la boussole pointe vers le point (sans réseau), avec la distance
+$('#btnRevenir').onclick = () => {
+  const p = S.points.find(x => x.id === S.cible) || S.points[0]; if (!p) return;
+  S.cible = p.id; save(); majPoints(); majBoussole(); if (!watchId) demarrerGps(); ouvrir('boussole');
+};
 $('#mesPoints').onclick = e => {
   const sup = e.target.dataset.suppr;
   if (sup) { S.points = S.points.filter(p => p.id !== sup); if (S.cible === sup) S.cible = null; }
@@ -1747,12 +1762,13 @@ $('#btnSurvie').onclick = () => {
 function consignes() {
   const c = [], now = Date.now();
   const s = majSoleil();
+  // Alertes météo (orage, chute de pression, coup de vent) en premier : ce sont les plus urgentes
+  const M = S.meteo, mi = M ? indexHeure(M) : -1;
+  if (mi >= 0) for (const a of alertesMeteo(M, mi, 6)) c.push(['meteo' + a.slice(0, 3), a + t('. Mets-toi à l\'abri à temps.'), [['Orage et foudre', () => ouvrirFiche('orage')]]]);
   if (!pos) c.push(['gps', 'Active ta position : sors à découvert et attends le signal GPS.', [['Activer le GPS', demarrerGps]]]);
   if (!S.points.length && pos) c.push(['camp', 'Marque ta position actuelle : tu pourras toujours y revenir.', [['Marquer ce point', () => $('#btnMarquer').click()]]]);
   if (batterie && !batterie.charging && batterie.level < .2) c.push(['bat', `Batterie à ${Math.round(batterie.level * 100)} %. Mode avion, luminosité au minimum, téléphone contre toi.`, []]);
   if (s.set && now < s.set && s.set - now < 90 * 60e3) c.push(['nuit', `La nuit tombe dans ${duree(s.set - now)}. Commence ton abri maintenant.`, [['Comment faire un abri', () => ouvrirFiche('abri')], ['Vérifier l\'emplacement', () => $('#btnBivouac').click()]]]);
-  const M = S.meteo, mi = M ? indexHeure(M) : -1;
-  if (mi >= 0) for (const a of alertesMeteo(M, mi, 6)) c.push(['meteo' + a.slice(0, 3), a + '. Mets-toi à l\'abri à temps.', [['Orage et foudre', () => ouvrirFiche('orage')]]]);
   if (s.set && now > s.set) c.push(['dort', 'Il fait nuit. Reste à l\'abri, isolé du sol. Ne marche pas dans le noir.', [['Où ne pas dormir', () => ouvrirFiche('bivouac')]]]);
   if (now - derniereGorgee > 2 * 3600e3) c.push(['eau', 'Ça fait 2 heures. Bois quelques gorgées.', [['J\'ai bu', () => { derniereGorgee = Date.now(); refusConsignes.delete('eau'); coach(); }], ['Trouver de l\'eau', () => ouvrirFiche('eau-trouver')]]]);
   const tdn = $('#tendance');
