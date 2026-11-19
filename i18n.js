@@ -137,6 +137,8 @@ const T = {
   "Pas de météo récente : télécharge-la dès que tu as du réseau.": ["No recent weather: download it as soon as you have a connection.", "Sin tiempo reciente: descárgalo en cuanto tengas red."],
   "{v} est à {d} vers le {c}. Si quelqu'un sait où tu es, reste visible sur place.": ["{v} is {d} away to the {c}. If someone knows where you are, stay visible where you are.", "{v} está a {d} hacia el {c}. Si alguien sabe dónde estás, quédate visible donde estás."],
   "Mentions légales": ["Legal notice (in French)", "Aviso legal (en francés)"],
+  "Installée · appuie pour la démarrer": ["Installed · tap to start it", "Instalada · toca para iniciarla"], "Répond à partir du guide, sans internet · {m} à télécharger une fois": ["Answers from the guide, offline · {m} to download once", "Responde con la guía, sin internet · {m} para descargar una vez"],
+  "Style de l'app": ["App style", "Estilo de la app"], "Clair adouci, ou un style Studio sombre et épuré": ["Softened light, or a dark, clean Studio style", "Claro suavizado, o un estilo Studio oscuro y limpio"], "Studio graphite": ["Studio graphite", "Studio grafito"], "Studio minuit": ["Studio midnight", "Studio medianoche"], "Studio forêt": ["Studio forest", "Studio bosque"], "Studio prune": ["Studio plum", "Studio ciruela"],
   "Clair": ["Light", "Claro"], "Doux": ["Soft", "Suave"], "Sombre": ["Dark", "Oscuro"], "Nuit": ["Night", "Noche"], "Changer le style de la carte": ["Change map style", "Cambiar el estilo del mapa"],
   "Pays": ["Country", "País"],
   "hab.": ["inhab.", "hab."],

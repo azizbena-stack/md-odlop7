@@ -1341,7 +1341,7 @@ function majIA() {
   $$('#iaModeles .chip').forEach(c => c.classList.toggle('on', c.dataset.m === choixIA));
   if (moteur) return;
   $('#btnIA').hidden = false; $('#btnIA').textContent = iaInstallee() ? 'Démarrer' : 'Installer';
-  iaEtat(iaInstallee() ? 'Installée · appuie pour la démarrer' : `Répond à partir du guide, sans internet · ${MODELES[choixIA][1]} à télécharger une fois`);
+  iaEtat(iaInstallee() ? t('Installée · appuie pour la démarrer') : t('Répond à partir du guide, sans internet · {m} à télécharger une fois', { m: MODELES[choixIA][1] }));
 }
 majIA();
 const nouvelleIA = async () => new (wllamaCls ??= (await import('./vendor/wllama.js')).Wllama)(
@@ -1569,9 +1569,12 @@ $('#btnFond').onclick = () => {
 // Thème nuit rouge
 const appliquerTheme = () => {
   document.documentElement.dataset.theme = S.theme; $('#btnRouge').setAttribute('aria-pressed', S.theme === 'rouge');
-  document.documentElement.classList.toggle('studio', !!S.studio); $('#btnStudio')?.setAttribute('aria-pressed', !!S.studio);
+  // Styles Studio : même mise en page sombre, couleurs différentes (graphite = l'ancien interrupteur « Style Studio »)
+  if (S.studio) { S.ambiance = 'graphite'; delete S.studio; save(); }
+  document.documentElement.classList.toggle('studio', !!S.ambiance); document.documentElement.dataset.ambiance = S.ambiance || '';
+  document.querySelectorAll('#ambiances [data-a]').forEach(b => b.classList.toggle('on', b.dataset.a === (S.ambiance || '')));
 };
-$('#btnStudio') && ($('#btnStudio').onclick = () => { S.studio = !S.studio; save(); appliquerTheme(); });
+$('#ambiances').onclick = e => { const b = e.target.closest('[data-a]'); if (!b) return; S.ambiance = b.dataset.a; save(); appliquerTheme(); };
 $('#btnRouge').onclick = () => { S.theme = S.theme === 'rouge' ? '' : 'rouge'; save(); appliquerTheme(); };
 appliquerTheme();
 
