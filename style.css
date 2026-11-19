@@ -387,6 +387,9 @@ html.carte-plein-ecran, html.carte-plein-ecran body { overflow: hidden; overscro
 .plan-haut { position: absolute; inset: 10px 10px auto; z-index: 501; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; pointer-events: none; }
 .plan-haut-actions { display: flex; gap: 6px; grid-column: 2; justify-self: end; }
 .plan-haut > * { pointer-events: auto; }
+#btnDangerPlan { grid-column: 1; justify-self: start; display: flex; align-items: center; gap: 7px; text-align: left; }
+#btnDangerPlan svg { flex: none; width: 18px; height: 18px; }
+.plan-haut:has(#navBandeau:not([hidden])) #btnDangerPlan { display: none; }
 .plan-calcul, .iti-horaires { margin: 0; padding: 8px 10px; border-radius: 12px; color: var(--txt); background: var(--surface); box-shadow: var(--ombre); }
 .plan-calcul { font-size: 13px; grid-column: 1 / -1; justify-self: start; overflow-wrap: anywhere; }
 .iti-horaires {
@@ -559,13 +562,20 @@ html.carte-plein-ecran, html.carte-plein-ecran body { overflow: hidden; overscro
 .grille-danger { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 12px 0; }
 .grille-danger .tuile { min-height: 0; padding: 12px; text-align: left; }
 .grille-danger .tuile b { font-size: 24px; }
-.alerte-danger { position: fixed; z-index: 3000; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top)); display: flex; align-items: center; gap: 12px;
-  background: #E5331F; color: #fff; border-radius: 16px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); cursor: pointer; }
+.dangers-situation { margin-top: 14px; }
+.dangers-situation summary { cursor: pointer; padding: 8px 0; }
+.dangers-situation ul { list-style: none; padding: 0; margin: 0; max-height: 260px; overflow-y: auto; }
+.dangers-situation li { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 6px 0; border-top: 1px solid var(--ligne); }
+.dangers-situation li .btn { margin: 0; }
+.alerte-danger { position: fixed; z-index: 3000; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top)); margin: 0 auto; max-width: 540px;
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px 12px;
+  background: #AD2A20; color: #fff; border-radius: 16px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
 .alerte-danger .ico { font-size: 28px; }
-.alerte-danger > span:nth-child(2) { flex: 1; min-width: 0; }
-.alerte-danger b { display: block; font-size: 17px; }
+.alerte-danger b { display: block; font-size: 17px; overflow-wrap: anywhere; }
 .alerte-danger small { display: block; font-size: 13px; opacity: .9; }
-.alerte-danger button { border: 0; background: rgba(255, 255, 255, .22); color: #fff; width: 32px; height: 32px; border-radius: 50%; flex: none; padding: 0; display: grid; place-items: center; }
+.alerte-danger button { border: 0; background: rgba(255, 255, 255, .18); color: #fff; min-height: 44px; cursor: pointer; font: inherit; font-weight: 650; }
+#fermerAlerteDanger { width: 44px; border-radius: 50%; }
+#retirerAlerteDanger { grid-column: 2 / -1; justify-self: start; border-radius: 12px; padding: 6px 12px; }
 .plan-danger { background: #E5331F; border-radius: 50%; font-size: 15px; }
 /* Fenêtres : le contenu défile, « Fermer » et la croix restent toujours visibles */
 dialog[open] { display: flex; flex-direction: column; overflow: hidden; }

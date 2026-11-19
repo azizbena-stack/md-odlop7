@@ -215,7 +215,9 @@ const T = {
   "par toi": ["by you", "por ti"], "par ton groupe": ["by your group", "por tu grupo"], "par {n}": ["by {n}", "por {n}"], "sur refuges.info": ["on refuges.info", "en refuges.info"],
   "Passage délicat : {n}": ["Tricky passage: {n}", "Paso delicado: {n}"],
   "Signalé {q} il y a {d}": ["Reported {q} {d} ago", "Señalado {q} hace {d}"],
-  "Plus là : retirer": ["Gone: remove", "Ya no está: quitar"],
+  "Danger disparu": ["Hazard gone", "El peligro ya no está"],
+  "Dangers signalés": ["Reported hazards", "Peligros señalados"],
+  "Masquer ce passage": ["Hide this passage", "Ocultar este paso"],
   // Boussole, points, parcours
   "Choisis un point ci-dessous pour être guidé": ["Pick a point below to be guided", "Elige un punto abajo para que te guíe"],
   "Activer la boussole": ["Turn on the compass", "Activar la brújula"],

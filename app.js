@@ -77,6 +77,7 @@ function ouvrir(vue) {
     if (guidage) pleinEcranCarte(true);
     setTimeout(initPlan);
   }
+  if (vue === 'situation') majDangersSituation();
   majVerrouillage(); // la carte a besoin d'un conteneur visible
   if (document.documentElement.classList.contains('survie')) coach();
 }
@@ -201,7 +202,7 @@ function majSituation() {
 
 function dessinerRadar(here) {
   const R = 5000, svg = $('#radar');
-  const pts = nearest(POINTS, here, 40, p => [p[2], p[3]]).filter(n => n.d < R);
+  const pts = nearest(POINTS, here, 40, p => [p[2], p[3]]).filter(n => n.d < R && !passageMasque(n.p));
   const vil = nearest(COMMUNES, here, 12).filter(n => n.d < R);
   const rotH = -(heading ?? 0);
   const xy = (n) => { const a = (n.cap + rotH) * Math.PI / 180, r = n.d / R * 100; return [Math.sin(a) * r, -Math.cos(a) * r]; };
@@ -817,7 +818,7 @@ function demarrerGuidage() {
   navMk = marqueurPlan(ici(), el, 'center', { rotationAlignment: 'map', pitchAlignment: 'map' });
   $('#navBandeau').hidden = false; $('#itiChoix').hidden = true; $('#btnPlein').hidden = true; // pendant le guidage : toujours plein écran, on arrête avec la croix du bandeau vert
   pleinEcranCarte(true); afficherCalculCarte('');
-  voixEtape = { depart: true }; horsRoute = false; dire(t('C\'est parti vers {n}.', { n: S.route.dest.nom }), true);
+  voixEtape = { depart: true }; horsRoute = false; dire(t('C\'est parti vers {n}.', { n: S.route.dest.nom }));
   dessinerRoute(S.route, false); majGuidage();
   if (guidage) cadrerGuidage();
 }
@@ -871,7 +872,7 @@ function majGuidage() {
   const v = pos.coords.speed, cap = v > 2 && pos.coords.heading != null && !isNaN(pos.coords.heading) ? pos.coords.heading : capRoute;
   // Sur la route, la flèche est posée sur le tracé (comme un GPS de voiture) : elle ne tremble plus à côté
   if (carteVisible()) allerVers(dmin < 25 ? proj : me, cap);
-  if (distance(me, R.dest.ll) < 30) { const a = t('Tu es arrivé : {n}.', { n: R.dest.nom }); dire(a, true); return arreterGuidage(a); }
+  if (distance(me, R.dest.ll) < 30) { const a = t('Tu es arrivé : {n}.', { n: R.dest.nom }); dire(a, 'navigation'); return arreterGuidage(a); }
   const total = cumul.at(-1), fin = Math.max(0, total - progression) + dmin;
   resteGuidage = total ? R.t * Math.min(1, Math.max(0, fin / total)) : R.t;
   majHoraires();
@@ -898,17 +899,22 @@ function afficherVirage(progression, ecart) {
 let voixEtape = {}, horsRoute = false;
 const minuscule = t => t[0].toLowerCase() + t.slice(1);
 function annoncer(prochaine, dEtape, dmin) {
-  if (dmin > 60) { instructionAttente = null; if (!horsRoute) dire('Tu t\'écartes de l\'itinéraire. Rejoins la ligne violette.'); horsRoute = true; return; }
+  if (dmin > 60) {
+    if (!horsRoute) dire('Tu t\'écartes de l\'itinéraire. Rejoins la ligne violette.', 'navigation');
+    horsRoute = true;
+    return;
+  }
+  if (horsRoute) fileVoix.delete('navigation');
   horsRoute = false;
   if (!prochaine) return;
   const vite = (pos.coords.speed || 0) > 8, proche = vite ? 200 : 40, loin = vite ? 1500 : 300;
   if (voixEtape.i !== prochaine.i) {
-    instructionAttente = null;
+    fileVoix.delete('navigation');
     voixEtape = { i: prochaine.i };
   }
-  if (prochaine.t === t('Tu es arrivé') || prochaine.t === 'Tu es arrivé') { if (!voixEtape.loin && dEtape <= loin) { voixEtape.loin = true; dire(t('Arrivée dans {d}.', { d: parleDist(dEtape) }), false, true); } return; } // « Tu es arrivé » est dit une seule fois, à l'arrivée
-  if (!voixEtape.proche && dEtape <= proche) { voixEtape.proche = voixEtape.loin = true; dire(prochaine.t, false, true); }
-  else if (!voixEtape.loin && (dEtape <= loin || voixEtape.depart)) { voixEtape.loin = true; dire(t('Dans {d}, {c}.', { d: parleDist(dEtape), c: minuscule(prochaine.t) }), false, true); }
+  if (prochaine.t === t('Tu es arrivé') || prochaine.t === 'Tu es arrivé') { if (!voixEtape.loin && dEtape <= loin) { voixEtape.loin = true; dire(t('Arrivée dans {d}.', { d: parleDist(dEtape) }), 'navigation'); } return; } // « Tu es arrivé » est dit une seule fois, à l'arrivée
+  if (!voixEtape.proche && dEtape <= proche) { voixEtape.proche = voixEtape.loin = true; dire(prochaine.t, 'navigation'); }
+  else if (!voixEtape.loin && (dEtape <= loin || voixEtape.depart)) { voixEtape.loin = true; dire(t('Dans {d}, {c}.', { d: parleDist(dEtape), c: minuscule(prochaine.t).replace(/\.$/, '') }), 'navigation'); }
 }
 // Flèche continue : entre deux positions GPS (environ 1 par seconde), elle glisse et tourne image par image,
 // et la caméra la suit au même rythme (plus de sauts)
@@ -929,8 +935,7 @@ function boucleNav(t) {
   if (k < 1) rafNav = requestAnimationFrame(boucleNav);
 }
 $('#navStop').onclick = () => arreterGuidage();
-$('#navVoix').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (!S.voix) stopperVoix(); else dire('Voix activée.'); };
-$('#navDanger').onclick = () => signalerDanger();
+$('#navVoix').onclick = () => $('#btnVoixGps').click();
 
 // Refuges, points d'eau, hôpitaux… et mes points, quand on zoome assez
 let minuteriePoints = 0;
@@ -954,9 +959,10 @@ function majPointsPlan() {
       .setPopup(popupPlan(10).setText(p.nom)));
   }
   for (const d of dangersActifs()) garder(d, () => {
-    const popup = popupPlan(14);
-    popup.on('open', () => popup.setHTML(`<b>${SIGNALES[d.type][1]}</b><br>${t('Signalé {q} il y a {d}', { q: d.moi ? t('par toi') : d.par ? t('par {n}', { n: esc(d.par) }) : t('par ton groupe'), d: depuis(Date.now() - d.t) })}<br><button class="btn petit" data-suppr-danger="${esc(d.id)}">Plus là : retirer</button>`));
-    return marqueur([d.lat, d.lon], 'plan-pt plan-danger', SIGNALES[d.type][0]).setPopup(popup.setText(SIGNALES[d.type][1]));
+    const [icone, libelle] = SIGNALES[d.type];
+    const info = t('Signalé {q} il y a {d}', { q: auteurDanger(d), d: depuis(Date.now() - d.t) });
+    const popup = popupPlan(14).setHTML(`<b>${t(libelle)}</b><br>${esc(info)}<br>${boutonRetirerDanger(d.id)}`);
+    return marqueur([d.lat, d.lon], 'plan-pt plan-danger', icone).setPopup(popup);
   });
   const zoom = plan.getZoom(), afficherLieux = zoom >= 11 && S.lieuxCarte !== false;
   if (afficherLieux) {
@@ -981,9 +987,12 @@ function majPointsPlan() {
     let n = 0;
     for (const p of POINTS) {
       if (!b.contains([p[3], p[2]])) continue;
+      const passage = p[0] === 'danger';
+      if (passageMasque(p)) continue;
       garder(p, () => {
         const [ico, lib] = TYPES[p[0]] || ['•', p[0]];
-        const popup = popupPlan(14).setHTML(`<b>${esc(p[1])}</b><br>${lib}${p[4] ? ' · ' + p[4] + ' m' : ''}`);
+        const retirer = passage ? '<br>' + boutonRetirerDanger(idPassage(p), true) : '';
+        const popup = popupPlan(14).setHTML(`<b>${esc(p[1])}</b><br>${t(lib)}${p[4] ? ' · ' + p[4] + ' m' : ''}${retirer}`);
         return marqueur([p[2], p[3]], 'plan-pt', ico).setPopup(popup);
       });
       if (++n === 300) break;
@@ -1503,16 +1512,20 @@ $('#btnSifflet').onclick = () => {
 
 // ---------- Voix (synthèse vocale du téléphone, hors ligne sur iPhone et la plupart des Android) ----------
 S.voix ??= true; S.alerteDanger ??= true;
-let instructionAttente = null;
+const fileVoix = new Map();
+let phraseEnCours = null, pauseVoix = 0;
 const voixPourLangue = () => (window.speechSynthesis?.getVoices() || [])
   .filter(v => v.lang.toLowerCase().split(/[-_]/)[0] === LANGUE);
 function voixGuidage() {
   const voix = voixPourLangue(), exacte = v => v.lang.toLowerCase().replace('_', '-') === LOC.toLowerCase();
-  const amelioree = v => /enhanced|premium|améliorée|mejorada|natural/i.test(v.name);
+  const amelioree = v => /enhanced|premium|amélioré|mejorad|natural|neural/i.test(v.name);
   return voix.find(v => v.voiceURI === S.voixChoisie?.[LANGUE])
     || voix.find(v => exacte(v) && v.localService && amelioree(v))
+    || voix.find(v => v.localService && amelioree(v))
+    || voix.find(v => exacte(v) && v.localService && v.default)
     || voix.find(v => exacte(v) && v.localService)
-    || voix.find(exacte) || voix.find(v => v.localService) || voix[0];
+    || voix.find(v => v.localService)
+    || voix.find(exacte) || voix[0];
 }
 function majListeVoix() {
   const el = $('#regVoixChoix');
@@ -1524,37 +1537,47 @@ function majListeVoix() {
   $('#regDebit').disabled = $('#regVoixEcouter').disabled = el.disabled;
 }
 function stopperVoix() {
-  instructionAttente = null;
-  window.speechSynthesis?.cancel();
+  fileVoix.clear();
+  clearTimeout(pauseVoix);
+  pauseVoix = 0;
+  if (!phraseEnCours) return;
+  phraseEnCours = null;
+  window.speechSynthesis.cancel();
 }
-function reprendreInstruction() {
-  setTimeout(() => {
-    const synth = window.speechSynthesis;
-    if (!instructionAttente || !guidage || synth.speaking || synth.pending) return;
-    const instruction = instructionAttente;
-    instructionAttente = null;
-    dire(instruction, false, true);
-  }, 0);
+function lireFileVoix() {
+  if (phraseEnCours || pauseVoix || !fileVoix.size) return;
+  // L'alerte passe avant la prochaine consigne, après la phrase en cours.
+  const categorie = fileVoix.has('danger') ? 'danger' : fileVoix.keys().next().value;
+  const { texte, secours } = fileVoix.get(categorie);
+  fileVoix.delete(categorie);
+  prononcer(texte, secours);
 }
-function prononcer(texte) {
+function prononcer(texte, secours, muet = false) {
   const synth = window.speechSynthesis;
-  if (!synth) return;
   const voix = voixGuidage(), u = new SpeechSynthesisUtterance(texte);
   u.lang = voix?.lang || LOC; if (voix) u.voice = voix;
   u.rate = S.debitVoix || .95;
-  u.onend = u.onerror = reprendreInstruction;
-  synth.speak(u);
+  if (muet) u.volume = 0;
+  phraseEnCours = u; // garder l'objet vivant jusqu'à la fin de la lecture sur Safari et Chrome
+  const finir = erreur => {
+    clearTimeout(secoursAmorce);
+    if (phraseEnCours !== u) return;
+    phraseEnCours = null;
+    const sonnerie = erreur && secours?.();
+    pauseVoix = setTimeout(() => { pauseVoix = 0; lireFileVoix(); }, sonnerie ? 420 : muet ? 0 : 160);
+  };
+  u.onend = () => finir(false);
+  u.onerror = () => finir(true);
+  // Certaines voix ne signalent pas la fin d'une lecture silencieuse.
+  const secoursAmorce = muet ? setTimeout(() => finir(false), 1500) : 0;
+  try { synth.speak(u); } catch { finir(true); }
 }
-function dire(texte, urgent = false, navigation = false) {
-  const synth = window.speechSynthesis;
-  if (!S.voix || !synth) return;
-  if (urgent) stopperVoix();
-  const message = D[texte] ?? texte;
-  if (navigation && !urgent && (synth.speaking || synth.pending)) {
-    instructionAttente = message;
-    return;
-  }
-  prononcer(message);
+function dire(texte, categorie = 'info', secours) {
+  if (!S.voix || !window.speechSynthesis) { secours?.(); return; }
+  const message = (D[texte] ?? texte).trim();
+  if (!message) return;
+  fileVoix.set(categorie, { texte: /[.!?…]$/.test(message) ? message : message + '.', secours });
+  lireFileVoix();
 }
 const parleDist = m => {
   const arrondi = n => n.toFixed(n < 10 ? 1 : 0).replace('.', FMT.dec);
@@ -1563,12 +1586,12 @@ const parleDist = m => {
   return m < 1000 ? t('{n} mètres', { n: Math.max(10, Math.round(m / 10) * 10) }) : t('{n} kilomètres', { n: arrondi(m / 1000) });
 };
 function debloquerSon() {
-  try { (ctx ??= new AudioContext()).resume(); } catch {}
-  if (S.voix && window.speechSynthesis && !debloquerSon.fait) { debloquerSon.fait = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0;
-    u.onend = u.onerror = reprendreInstruction;
-    speechSynthesis.speak(u); }
+  try { (ctx ??= new AudioContext()).resume().catch(() => {}); } catch {}
 }
-addEventListener('pointerdown', debloquerSon, { once: true });
+document.addEventListener('click', () => {
+  debloquerSon();
+  if (S.voix && window.speechSynthesis && !phraseEnCours) prononcer(t('Voix activée.'), null, true);
+}, { once: true, capture: true });
 function majVoix() {
   $('#navVoix').innerHTML = pic(S.voix ? 'son' : 'muet'); $('#navVoix').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix');
   $('#btnVoixPlan').innerHTML = pic(S.voix ? 'son' : 'muet'); $('#btnVoixPlan').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix'); $('#btnVoixPlan').classList.toggle('coupe', !S.voix);
@@ -1578,61 +1601,113 @@ function majVoix() {
 majVoix();
 $('#btnVoixPlan').onclick = () => $('#btnVoixGps').click();
 $('#btnVoixGps').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (S.voix) dire('Voix du guidage activée.'); else stopperVoix(); };
-$('#btnAlerteDanger').onclick = () => { S.alerteDanger = !S.alerteDanger; save(); majVoix(); if (S.alerteDanger) sonnerieDanger(); };
+$('#btnAlerteDanger').onclick = () => {
+  S.alerteDanger = !S.alerteDanger; save(); majVoix();
+  if (S.alerteDanger) verifierDangers();
+  else { fileVoix.delete('danger'); fermerAlerteDanger(); }
+};
 
 // ---------- Dangers signalés : arbre tombé, trou, obstacle… (par moi ou mon groupe), sonnerie en approchant ----------
 const SIGNALES = { arbre: [pic('arbre'), 'Arbre tombé'], trou: [pic('trou'), 'Trou'], obstacle: [pic('obstacle'), 'Obstacle'], eboul: [pic('rochers'), 'Éboulement'], eau: [pic('vagues'), 'Passage inondé'], glace: [pic('flocon'), 'Verglas · neige'], animal: [pic('patte'), 'Animal dangereux'], autre: [pic('danger'), 'Autre danger'] };
 const VIE_DANGER = 7 * 864e5; // ponytail: un signalement compte 7 jours, ensuite on le croit réglé
 S.dangers ??= [];
-const dangersActifs = () => S.dangers.filter(d => Date.now() - d.t < VIE_DANGER);
+S.dangersRetires = Object.fromEntries(Object.entries(S.dangersRetires || {}).filter(([, fin]) => fin === true || fin > Date.now()));
+const dangerRetire = id => S.dangersRetires[id] === true || S.dangersRetires[id] > Date.now();
+const dangersActifs = () => S.dangers.filter(d => Object.hasOwn(SIGNALES, d.type) && Date.now() - d.t < VIE_DANGER && !dangerRetire(d.id));
+const idPassage = p => 'ri' + p[2] + ',' + p[3];
+const passageMasque = p => p[0] === 'danger' && dangerRetire(idPassage(p));
+const auteurDanger = d => d.moi ? t('par toi') : d.par ? t('par {n}', { n: d.par }) : t('par ton groupe');
+const libelleRetirerDanger = passage => t(passage ? 'Masquer ce passage' : 'Danger disparu');
+const boutonRetirerDanger = (id, passage) => `<button class="btn petit" data-suppr-danger="${esc(id)}">${libelleRetirerDanger(passage)}</button>`;
+function majDangersSituation() {
+  const liste = dangersActifs();
+  $('#dangersSituation').hidden = !liste.length;
+  $('#dangersListe').innerHTML = liste.map(d => `<li><span>${SIGNALES[d.type][0]} ${t(SIGNALES[d.type][1])}</span>${boutonRetirerDanger(d.id)}</li>`).join('');
+}
+majDangersSituation();
 function signalerDanger() {
   if (!pos) return popup('<h2>Position inconnue</h2><p>Active le GPS : le danger est posé à l\'endroit où tu te trouves.</p>');
   popup(`<div class="k">Signaler un danger ici</div><h2>Qu'est-ce qu'il y a ?</h2>
     <div class="grille-danger">${Object.entries(SIGNALES).map(([k, [i, l]]) => `<button class="tuile" data-signal="${k}"><b>${i}</b><span>${l}</span></button>`).join('')}</div>
     <p class="note">Gardé 7 jours dans ton téléphone, envoyé à ton groupe s'il est connecté par le réseau. Ceux qui approchent entendent une alerte. Ne signale que ce que tu as vu : un faux signalement peut mettre des gens en danger.</p>`);
 }
-$('#btnDanger').onclick = signalerDanger;
+$('#btnDanger').onclick = $('#btnDangerPlan').onclick = $('#navDanger').onclick = signalerDanger;
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-signal]');
   if (b && pos) {
     const [la, lo] = ici(), d = { id: S.idProxi + '-' + Date.now().toString(36), type: b.dataset.signal, lat: +la.toFixed(5), lon: +lo.toFixed(5), t: Date.now(),
       par: (S.fiche.surnom || S.fiche.nom || '').slice(0, 12), moi: true };
-    S.dangers = [d, ...S.dangers].slice(0, 300); save(); dangersVus.add(d.id); // pas d'alerte pour celui qu'on vient de poser
+    S.dangers = [d, ...S.dangers].slice(0, 300); save(); dangersVus.set(d.id, 500);
     if (!NATIF && proxiOn) Proxi.danger(d); // ponytail: l'APK (Bluetooth, 13 octets) ne transmet pas encore les dangers
-    modal.close(); majPointsPlan(); dire(t('{l} signalé.', { l: t(SIGNALES[d.type][1]) }));
+    modal.close(); majPointsPlan(); majDangersSituation(); dire(t('{l} signalé.', { l: t(SIGNALES[d.type][1]) }));
   }
   const s = e.target.closest('[data-suppr-danger]');
-  if (s) { S.dangers = S.dangers.filter(d => d.id !== s.dataset.supprDanger); save(); majPointsPlan(); }
+  if (s) retirerDanger(s.dataset.supprDanger);
 });
-function recevoirDanger(d) {
-  if (!d || !SIGNALES[d.type] || !isFinite(d.lat) || !isFinite(d.lon) || !isFinite(d.t) || S.dangers.some(x => x.id === d.id)) return;
-  S.dangers = [{ id: String(d.id).slice(0, 40), type: d.type, lat: +d.lat, lon: +d.lon, t: Math.min(+d.t, Date.now()), par: String(d.par || '').slice(0, 12) }, ...S.dangers].slice(0, 300);
-  save(); majPointsPlan(); verifierDangers();
+function retirerDanger(id) {
+  const d = S.dangers.find(d => d.id === id);
+  if (!d && !/^ri-?[\d.]+,-?[\d.]+$/.test(id)) return;
+  S.dangersRetires = Object.fromEntries([
+    ...Object.entries(S.dangersRetires).filter(([id]) => dangerRetire(id)),
+    [id, d ? Date.now() + VIE_DANGER : true],
+  ]);
+  S.dangers = S.dangers.filter(d => d.id !== id);
+  dangersVus.delete(id);
+  if (alerteId === id) fermerAlerteDanger();
+  save();
+  majPointsPlan();
+  majDangersSituation();
+  if (!d && pos) dessinerRadar(ici());
 }
-function sonnerieDanger() { [0, 300, 600].forEach(t => setTimeout(() => bip(180, 1500), t)); setTimeout(() => bip(450, 1000), 900); }
-let dangersVus = new Set(), dangersFiches = null, alerteT = 0;
+function recevoirDanger(d) {
+  if (!d || !Object.hasOwn(SIGNALES, d.type) || !isFinite(d.lat) || !isFinite(d.lon) || !isFinite(d.t) || Date.now() - d.t >= VIE_DANGER) return;
+  const id = String(d.id);
+  if (!/^[A-Za-z0-9-]{1,40}$/.test(id) || dangerRetire(id) || S.dangers.some(x => x.id === id)) return;
+  S.dangers = [{ id, type: d.type, lat: +d.lat, lon: +d.lon, t: Math.min(+d.t, Date.now()), par: String(d.par || '').slice(0, 12) }, ...S.dangers].slice(0, 300);
+  save(); majPointsPlan(); majDangersSituation(); verifierDangers();
+}
+const dangersVus = new Map();
+let dangersFiches = null, alerteId = null, alerteT = 0;
+function fermerAlerteDanger() {
+  clearTimeout(alerteT);
+  alerteId = null;
+  fileVoix.delete('danger');
+  $('#alerteDanger').hidden = true;
+}
+function afficherAlerteDanger(x, d) {
+  alerteId = x.id;
+  $('#alerteDangerIcone').innerHTML = x.ico;
+  $('#alerteDangerTitre').textContent = x.lib;
+  $('#alerteDangerInfo').textContent = t('À {d} · signalé {q}', { d: fmtDist(d), q: x.qui })
+    + (x.t ? t(' il y a {d}', { d: depuis(Date.now() - x.t) }) : '');
+  $('#retirerAlerteDanger').textContent = libelleRetirerDanger(!x.t);
+  $('#alerteDanger').hidden = false;
+  alerteT = setTimeout(fermerAlerteDanger, 20000);
+  navigator.vibrate?.([300, 120, 300, 120, 600]);
+  dire(t('Attention : {l} signalé à {d}.', { l: x.lib.replace(/ :.*/, ''), d: parleDist(d) }), 'danger', () => {
+    if (alerteId !== x.id) return false;
+    try { bip(350, 1200); return true; } catch { return false; }
+  });
+}
 function verifierDangers() {
-  if (!S.alerteDanger || !pos) return;
+  if (!S.alerteDanger || !pos || alerteId) return;
   const me = ici(), v = pos.coords.speed || 0, seuil = v > 8 ? 500 : 150; // à pied 150 m, en voiture 500 m
   const capGps = v > 1 && pos.coords.heading != null && !isNaN(pos.coords.heading) ? pos.coords.heading : null;
   dangersFiches ??= POINTS.length ? POINTS.filter(p => p[0] === 'danger') : null; // passages délicats de refuges.info
-  const liste = [...dangersActifs().map(d => ({ id: d.id, ll: [d.lat, d.lon], lib: t(SIGNALES[d.type][1]), ico: SIGNALES[d.type][0], qui: d.moi ? t('par toi') : d.par ? t('par {n}', { n: d.par }) : t('par ton groupe'), t: d.t })),
-    ...(dangersFiches || []).map(p => ({ id: 'ri' + p[2] + ',' + p[3], ll: [p[2], p[3]], lib: t('Passage délicat : {n}', { n: p[1] }), ico: pic('danger'), qui: t('sur refuges.info') }))];
+  const liste = [...dangersActifs().map(d => ({ id: d.id, ll: [d.lat, d.lon], lib: t(SIGNALES[d.type][1]), ico: SIGNALES[d.type][0], qui: auteurDanger(d), t: d.t })),
+    ...(dangersFiches || []).filter(p => !dangerRetire(idPassage(p))).map(p => ({ id: idPassage(p), ll: [p[2], p[3]], lib: t('Passage délicat : {n}', { n: p[1] }), ico: pic('danger'), qui: t('sur refuges.info') }))];
   for (const x of liste) {
     const d = distance(me, x.ll);
-    if (d > seuil * 2) { dangersVus.delete(x.id); continue; } // réarmée une fois loin
+    if (d > 2 * Math.max(seuil, dangersVus.get(x.id) || 0)) { dangersVus.delete(x.id); continue; }
     if (d > seuil || dangersVus.has(x.id)) continue;
     if (capGps != null && d > 30 && ecartAngle(capGps, bearing(me, x.ll)) > 70) continue; // derrière moi : pas d'alerte
-    dangersVus.add(x.id);
-    sonnerieDanger(); navigator.vibrate?.([300, 120, 300, 120, 600]);
-    dire(t('Attention : {l} signalé à {d}.', { l: x.lib.replace(/ :.*/, ''), d: parleDist(d) }), true);
-    const el = $('#alerteDanger');
-    el.innerHTML = `<span class="ico">${x.ico}</span><span><b>${esc(x.lib)}</b><small>${t('À {d} · signalé {q}', { d: fmtDist(d), q: esc(x.qui) })}${x.t ? t(' il y a {d}', { d: depuis(Date.now() - x.t) }) : ''}</small></span><button aria-label="Fermer">✕</button>`;
-    el.hidden = false; clearTimeout(alerteT); alerteT = setTimeout(() => { el.hidden = true; }, 15000);
+    dangersVus.set(x.id, seuil);
+    afficherAlerteDanger(x, d);
     break;
   }
 }
-$('#alerteDanger').onclick = () => { $('#alerteDanger').hidden = true; };
+$('#fermerAlerteDanger').onclick = fermerAlerteDanger;
+$('#retirerAlerteDanger').onclick = () => { if (alerteId) retirerDanger(alerteId); };
 
 // ---------- SOS : message vocal en boucle ----------
 let voixUrl = null, voixLoop = 0, rec = null;
@@ -2121,8 +2196,8 @@ $('#regVoixChoix').onchange = e => {
 };
 $('#regDebit').onchange = e => { S.debitVoix = Number(e.target.value); save(); };
 $('#regVoixEcouter').onclick = () => {
-  stopperVoix();
-  prononcer(t('Dans trois cents mètres, tourne à droite. Puis continue tout droit.'));
+  fileVoix.set('essai', { texte: t('Dans trois cents mètres, tourne à droite. Puis continue tout droit.') });
+  lireFileVoix();
 };
 window.speechSynthesis?.addEventListener('voiceschanged', majListeVoix);
 $('#regUnites').onchange = e => {

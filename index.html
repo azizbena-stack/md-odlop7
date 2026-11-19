@@ -169,6 +169,10 @@
     <ul class="proches" id="proches"></ul>
     <ul class="proches" id="devantListe" hidden></ul>
     <button class="btn petit" id="btnDanger" style="margin-top:10px"><svg class="ic"><use href="#i-danger"/></svg> Signaler un danger ici</button>
+    <details class="dangers-situation" id="dangersSituation" hidden>
+      <summary>Dangers signalés</summary>
+      <ul id="dangersListe"></ul>
+    </details>
   </div>
 
   <div class="carte" id="risquesCarte" hidden>
@@ -186,7 +190,7 @@
     <div class="plan-haut">
       <div class="nav-bandeau" id="navBandeau" hidden>
         <div><b id="navConsigne"></b><small id="navDist"></small></div>
-        <button id="navDanger" aria-label="Signaler un danger ici"><svg class="ic"><use href="#i-danger"/></svg></button>
+        <button id="navDanger" aria-haspopup="dialog" aria-label="Signaler un danger ici"><svg class="ic" aria-hidden="true"><use href="#i-danger"/></svg></button>
         <button id="navVoix" aria-label="Couper la voix"><svg class="ic"><use href="#i-son"/></svg></button>
         <button id="navStop" aria-label="Arrêter le guidage">✕</button>
       </div>
@@ -194,6 +198,7 @@
         <svg class="ic" aria-hidden="true"><use href="#i-virage"/></svg>
         <div><b id="navVirageDistance" aria-hidden="true"></b><span id="navVirageTexte"></span></div>
       </div>
+      <button id="btnDangerPlan" class="plan-btn" aria-haspopup="dialog"><svg aria-hidden="true"><use href="#i-danger"/></svg> <span>Signaler un danger ici</span></button>
       <div class="plan-haut-actions">
         <button id="btnReglagesCarte" class="plan-btn" aria-haspopup="dialog" aria-label="Réglages de la carte"><svg aria-hidden="true"><use href="#i-reglages"/></svg></button>
         <button id="btnPlein" class="plan-btn" aria-label="Carte en plein écran" aria-pressed="false">⤢</button>
@@ -406,7 +411,12 @@
   <p class="credits">Données : communes © État français (geo.api.gouv.fr) · refuges et points d'eau © refuges.info (CC BY-SA) · hôpitaux © contributeurs OpenStreetMap (ODbL) · T’es où ? ne remplace pas les secours ni une formation.<br><a href="legal.html" target="_blank" rel="noopener">Mentions légales · conditions · confidentialité · licences</a><br><span id="version"></span></p>
 </section>
 </main>
-<div class="alerte-danger" id="alerteDanger" role="alert" hidden></div>
+<div class="alerte-danger" id="alerteDanger" hidden>
+  <span class="ico" id="alerteDangerIcone" aria-hidden="true"></span>
+  <div class="alerte-danger-message" role="alert" aria-atomic="true"><b id="alerteDangerTitre"></b><small id="alerteDangerInfo"></small></div>
+  <button id="fermerAlerteDanger" aria-label="Fermer">✕</button>
+  <button id="retirerAlerteDanger"></button>
+</div>
 
 <nav class="tabs">
   <button data-vue="situation" class="active"><svg><use href="#i-pos"/></svg>Situation</button>
