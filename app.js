@@ -1748,7 +1748,7 @@ const STATIONS = Object.assign({}, ...Object.values(RADIOS).map(g => g[1]));
 // Icônes maison (pas les logos des radios, qui sont des marques)
 // Vrais logos des radios (Wikimedia Commons, domaine public), gardés dans l'app pour marcher hors ligne
 const LOGO_RADIO = k => `radios/${k}.${k === 'europe1' ? 'png' : 'svg'}`;
-const lecteur = new Audio();
+let lecteur = null;
 let radioOn = null;
 $('#radios').innerHTML = Object.values(RADIOS).map(([titre, st]) => `<div class="meta radio-groupe">${titre}</div>
   <div class="chips">${Object.entries(st).map(([k, v]) => `<button class="chip chip-radio" data-r="${k}"><img class="logo-radio" src="${LOGO_RADIO(k)}" alt=""> ${v[0]}</button>`).join('')}</div>`).join('');
@@ -1758,20 +1758,29 @@ function majRadio(t) {
 }
 $('#radios').onclick = e => {
   const b = e.target.closest('[data-r]'); if (!b) return;
-  if (radioOn === b.dataset.r) { radioOn = null; lecteur.pause(); lecteur.removeAttribute('src'); }
+  if (radioOn === b.dataset.r) { radioOn = null; couperRadio(); }
   else {
-    radioOn = b.dataset.r;
-    // ponytail: Europe 1 n'autorise pas les autres sites (pas de CORS) : sans crossOrigin elle passe partout sauf Safari isolé
-    lecteur.crossOrigin = radioOn === 'europe1' ? null : 'anonymous';
-    lecteur.src = STATIONS[radioOn][1];
-    lecteur.play().catch(() => majRadio('Lecture refusée : touche à nouveau la station'));
+    radioOn = b.dataset.r; relances = 0; ecouter();
     if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: STATIONS[radioOn][0], artist: 'T’es où ? · radio' });
   }
   majRadio();
 };
-lecteur.onwaiting = () => radioOn && majRadio('Chargement…');
-lecteur.onplaying = () => majRadio();
-lecteur.onerror = () => radioOn && majRadio('Pas de réseau : radio indisponible');
+function couperRadio() { if (!lecteur) return; lecteur.onerror = lecteur.onended = null; lecteur.pause(); lecteur.removeAttribute('src'); lecteur.load(); lecteur = null; }
+// Un lecteur neuf et une adresse unique à chaque écoute : sinon Safari rejouait un morceau déjà entendu
+// (« ça se répète », « toutes les radios disent la même chose ») au lieu du direct
+let relances = 0;
+function ecouter() {
+  couperRadio(); const a = lecteur = new Audio();
+  // ponytail: Europe 1 n'autorise pas les autres sites (pas de CORS) : sans crossOrigin elle passe partout sauf Safari isolé
+  a.crossOrigin = radioOn === 'europe1' ? null : 'anonymous';
+  a.preload = 'none';
+  a.src = STATIONS[radioOn][1] + '?direct=' + Date.now();
+  a.onwaiting = () => radioOn && majRadio('Chargement…');
+  a.onplaying = () => { relances = 0; majRadio(); };
+  // Un direct ne s'arrête jamais : coupure de réseau → on se reconnecte au direct (3 essais)
+  a.onended = a.onerror = () => { if (!radioOn || a !== lecteur) return; if (relances++ < 3) setTimeout(() => a === lecteur && ecouter(), 1500); else majRadio('Pas de réseau : radio indisponible'); };
+  a.play().catch(() => majRadio('Lecture refusée : touche à nouveau la station'));
+}
 
 // ---------- Mode survie : T’es où ? prend les choses en main ----------
 let survie = false, coachT = 0, derniereGorgee = Date.now(), refusConsignes = new Set();
