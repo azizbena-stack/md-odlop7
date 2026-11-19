@@ -137,6 +137,7 @@ const T = {
   "Pas de météo récente : télécharge-la dès que tu as du réseau.": ["No recent weather: download it as soon as you have a connection.", "Sin tiempo reciente: descárgalo en cuanto tengas red."],
   "{v} est à {d} vers le {c}. Si quelqu'un sait où tu es, reste visible sur place.": ["{v} is {d} away to the {c}. If someone knows where you are, stay visible where you are.", "{v} está a {d} hacia el {c}. Si alguien sabe dónde estás, quédate visible donde estás."],
   "Mentions légales": ["Legal notice (in French)", "Aviso legal (en francés)"],
+  "Clair": ["Light", "Claro"], "Doux": ["Soft", "Suave"], "Sombre": ["Dark", "Oscuro"], "Nuit": ["Night", "Noche"], "Changer le style de la carte": ["Change map style", "Cambiar el estilo del mapa"],
   "Pays": ["Country", "País"],
   "hab.": ["inhab.", "hab."],
   "Carte d'un pays entier": ["Map of a whole country", "Mapa de un país entero"],

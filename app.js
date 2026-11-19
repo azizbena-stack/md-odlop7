@@ -495,6 +495,10 @@ majTrace();
 // Itinéraire : serveurs OSRM publics de FOSSGIS (à pied, vélo, voiture). Il faut du réseau pour le calculer,
 // ensuite il est gardé dans le téléphone et la boussole peut prendre le relais en ligne droite.
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+// Styles de carte (demande d'Aziz : la carte claire éblouit) : mêmes morceaux, polices et pictos chez OpenFreeMap, donc la carte téléchargée marche avec tous
+const STYLES = [['liberty', 'Clair'], ['positron', 'Doux'], ['dark', 'Sombre'], ['fiord', 'Nuit']];
+const styleCarte = () => STYLES.find(x => x[0] === S.styleCarte) || STYLES[0];
+const urlStyle = () => `https://tiles.openfreemap.org/styles/${styleCarte()[0]}`;
 const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const MODES = { foot: ['routed-foot', t('à pied')], bike: ['routed-bike', t('à vélo')], car: ['routed-car', t('en voiture')] };
 let plan = null, moiMk = null, destMk = null, ptsMk = [], suivre = true, en3D = false;
@@ -513,7 +517,7 @@ function initPlan() {
   if (!window.maplibregl) return $('#itiRes').textContent = 'La carte n\'a pas pu se charger.';
   if (plan) return plan.resize();
   try {
-    plan = new maplibregl.Map({ container: 'plan', style: STYLE, center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 60, attributionControl: { compact: true },
+    plan = new maplibregl.Map({ container: 'plan', style: urlStyle(), center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 60, attributionControl: { compact: true },
       // Carte dans la page : un doigt fait défiler la page, deux doigts bougent la carte (en plein écran : un doigt suffit)
       cooperativeGestures: true, locale: { 'CooperativeGesturesHandler.MobileHelpText': 'Deux doigts pour bouger la carte · un doigt pour faire défiler', 'CooperativeGesturesHandler.WindowsHelpText': 'Ctrl + molette pour zoomer', 'CooperativeGesturesHandler.MacHelpText': '⌘ + molette pour zoomer' } }); // 60° au plus : au-delà on voit le ciel en haut de l’écran (Aziz veut la carte sur tout l’écran)
   } catch {
@@ -524,14 +528,16 @@ function initPlan() {
       Dans Chrome, tu peux essayer : tape <code>chrome://flags/#ignore-gpu-blocklist</code> dans la barre d'adresse, choisis « Enabled », puis relance Chrome.<br><br>
       La boussole et l'itinéraire restent disponibles ici.</div>`;
   }
-  plan.on('load', () => {
+  plan.on('style.load', () => { // à chaque style : on remet relief, itinéraire et réglages
     // Carte épurée (demande d'Aziz) : pas de bâtiments ni d'arrêts de transport ; seuls points affichés : essence, hôtels,
     // restaurants, hôpitaux (la classe « hospital » d'OpenMapTiles comprend les cliniques)
     // Ciel peint (sinon transparent = bande grise au-dessus de l'horizon en vue inclinée) : la carte remplit tout l'écran
-    plan.setSky({ 'sky-color': '#DCEAF5', 'horizon-color': '#EEF3F6', 'fog-color': '#F2EFE9', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.6 });
-    // Fond plus clair et eau plus bleue, façon GPS de voiture (2D comme 3D)
-    plan.getLayer('background') && plan.setPaintProperty('background', 'background-color', '#F4F2EE');
-    plan.getLayer('water') && plan.setPaintProperty('water', 'fill-color', '#9DCFF2');
+    const sombre = ['dark', 'fiord'].includes(styleCarte()[0]);
+    plan.setSky(sombre ? { 'sky-color': '#0B1220', 'horizon-color': '#1C2533', 'fog-color': '#1C2533', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.6 }
+      : { 'sky-color': '#DCEAF5', 'horizon-color': '#EEF3F6', 'fog-color': '#F2EFE9', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.6 });
+    // Fond plus clair et eau plus bleue, façon GPS de voiture (2D comme 3D), seulement sur le style clair
+    if (styleCarte()[0] === 'liberty') plan.getLayer('background') && plan.setPaintProperty('background', 'background-color', '#F4F2EE');
+    if (styleCarte()[0] === 'liberty') plan.getLayer('water') && plan.setPaintProperty('water', 'fill-color', '#9DCFF2');
     ['building', 'building-3d', 'poi_transit'].forEach(id => plan.getLayer(id) && plan.setLayoutProperty(id, 'visibility', 'none'));
     ['poi_r1', 'poi_r7', 'poi_r20'].forEach(id => {
       if (!plan.getLayer(id)) return;
@@ -562,6 +568,11 @@ function initPlan() {
   plan.on('moveend', majPointsPlan);
   majMoiPlan(); majPointsPlan(); majModes(); majRelief(); majZones();
 }
+$('#btnStyle').textContent = t(styleCarte()[1]);
+$('#btnStyle').onclick = () => {
+  S.styleCarte = STYLES[(STYLES.indexOf(styleCarte()) + 1) % STYLES.length][0]; save();
+  $('#btnStyle').textContent = t(styleCarte()[1]); plan?.setStyle?.(urlStyle());
+};
 $('#btnPlein').onclick = () => {
   const on = $('.plan-wrap').classList.toggle('plein');
   $('#btnPlein').textContent = on ? '✕' : '⤢'; $('#btnPlein').setAttribute('aria-label', on ? 'Quitter le plein écran' : 'Carte en plein écran');
@@ -800,7 +811,7 @@ async function garderCarte(btn, nom, morceaux) {
   try {
     const [tj, style] = await Promise.all([fetch('https://tiles.openfreemap.org/planet').then(r => r.json()), fetch(STYLE).then(r => r.json())]);
     const polices = ['Noto Sans Regular', 'Noto Sans Bold', 'Noto Sans Italic'].flatMap(f => ['0-255', '256-511', '512-767', '768-1023', '1024-1279', '1280-1535', '1536-1791', '3584-3839', '8192-8447'].map(r => `https://tiles.openfreemap.org/fonts/${encodeURIComponent(f)}/${r}.pbf`));
-    const urls = [STYLE, 'https://tiles.openfreemap.org/planet', ...polices, ...['.json', '.png', '@2x.json', '@2x.png'].map(x => style.sprite + x), ...morceaux(tj, style)];
+    const urls = [...STYLES.map(([k]) => `https://tiles.openfreemap.org/styles/${k}`), 'https://tiles.openfreemap.org/planet', ...polices, ...['.json', '.png', '@2x.json', '@2x.png'].map(x => style.sprite + x), ...morceaux(tj, style)];
     await navigator.storage?.persist?.(); // demande au téléphone de ne pas effacer ces cartes
     const c = await caches.open(ZONES), file = [...urls];
     let fait = 0, rate = 0;
@@ -1105,9 +1116,11 @@ function debloquerSon() {
 addEventListener('pointerdown', debloquerSon, { once: true });
 function majVoix() {
   $('#navVoix').innerHTML = pic(S.voix ? 'son' : 'muet'); $('#navVoix').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix');
+  $('#btnVoixPlan').innerHTML = pic(S.voix ? 'son' : 'muet'); $('#btnVoixPlan').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix'); $('#btnVoixPlan').classList.toggle('coupe', !S.voix);
   $('#btnVoixGps').setAttribute('aria-pressed', S.voix); $('#btnAlerteDanger').setAttribute('aria-pressed', S.alerteDanger);
 }
 majVoix();
+$('#btnVoixPlan').onclick = () => $('#btnVoixGps').click();
 $('#btnVoixGps').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (S.voix) dire('Voix du guidage activée.'); else speechSynthesis?.cancel(); };
 $('#btnAlerteDanger').onclick = () => { S.alerteDanger = !S.alerteDanger; save(); majVoix(); if (S.alerteDanger) sonnerieDanger(); };
 

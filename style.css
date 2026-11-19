@@ -476,7 +476,7 @@
   :root:not([data-theme="rouge"]) .plan-danger { background: #E5331F; border-radius: 50%; font-size: 15px; }
   /* Fenêtres : le contenu défile, « Fermer » et la croix restent toujours visibles */
   :root:not([data-theme="rouge"]) dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
-  :root:not([data-theme="rouge"]) #modalBody { overflow-y: auto; min-height: 0; flex: 1; margin: 0 -4px; padding: 0 4px; -webkit-overflow-scrolling: touch; }
+  :root:not([data-theme="rouge"]) #modalBody { overflow-y: auto; min-height: 0; flex: 0 1 auto; margin: 0 -4px; padding: 0 4px; -webkit-overflow-scrolling: touch; }
   :root:not([data-theme="rouge"]) #modalFermer { flex: none; margin: 14px 0 0; }
   :root:not([data-theme="rouge"]) .modal-x { position: absolute; top: 14px; right: 14px; z-index: 2; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--bg2); color: var(--txt2); font-size: 15px; cursor: pointer; }
   :root:not([data-theme="rouge"]) dialog { position: fixed; }
