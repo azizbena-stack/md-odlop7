@@ -153,7 +153,7 @@
 
   <div class="carte">
     <div class="row"><div class="k" id="radarTitre">Autour de toi</div><button class="chip" id="btnDevant" aria-pressed="false">Devant moi</button></div>
-    <div id="radarWrap" class="radar-wrap"><svg id="radar" viewBox="-110 -110 220 220"></svg></div>
+    <div id="radarWrap" class="radar-wrap"><svg id="radar" viewBox="-110 -110 220 220"></svg><div class="radar-balayage" aria-hidden="true"></div></div>
     <div class="meta devant-info" id="devantInfo" hidden></div>
     <ul class="proches" id="proches"></ul>
     <ul class="proches" id="devantListe" hidden></ul>
@@ -211,7 +211,7 @@
     <div class="ask"><div class="dest-champ"><input id="dest" class="loupe" type="text" enterkeyhint="go" placeholder="Ville, village… ou touche la carte" autocomplete="off">
       <button class="dest-hist" id="destHist" aria-label="Mes trajets" aria-expanded="false"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 5 5 5-5"/></svg></button>
       <ul class="dest-menu" id="destMenu" hidden></ul></div><button class="btn primaire" id="btnIti">Y aller</button></div>
-    <div class="chips" id="modes"><button class="chip" data-mode="car"><svg class="ic" aria-hidden="true"><use href="#i-voiture"/></svg> En voiture</button><button class="chip" data-mode="foot"><svg class="ic" aria-hidden="true"><use href="#i-pied"/></svg> À pied</button><button class="chip" data-mode="bike"><svg class="ic" aria-hidden="true"><use href="#i-velo"/></svg> À vélo</button></div>
+    <div class="chips" id="modes"><button class="chip" data-mode="car"><svg class="ic" style="color:#0A84FF" aria-hidden="true"><use href="#i-voiture"/></svg> En voiture</button><button class="chip" data-mode="foot"><svg class="ic" style="color:#34C759" aria-hidden="true"><use href="#i-pied"/></svg> À pied</button><button class="chip" data-mode="bike"><svg class="ic" style="color:#BF5AF2" aria-hidden="true"><use href="#i-velo"/></svg> À vélo</button></div>
     <div id="itiRes" class="meta">Choisis une destination. L'itinéraire se calcule avec du réseau, puis reste dans le téléphone.</div>
     <button class="btn large" id="btnItiBoussole" hidden style="margin-top:12px">Suivre à la boussole (sans réseau)</button>
     <ol class="etapes" id="etapes"></ol>
@@ -315,6 +315,10 @@
 <!-- MOI -->
 <section id="v-moi" class="vue">
   <h1 class="titre">Moi</h1>
+  <div class="carte row">
+    <div><b>Langue</b><div class="meta">Language · Idioma</div></div>
+    <select id="langue" class="pays-choix" aria-label="Langue · Language · Idioma"><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
+  </div>
   <div class="carte">
     <div class="k">Je suis</div>
     <div class="chips" id="profils"></div>
@@ -364,10 +368,6 @@
   <div class="carte row">
     <div><b>Alerte des dangers</b><div class="meta">Sonnerie en approchant d'un arbre tombé, d'un trou, d'un obstacle… signalé par toi ou ton groupe</div></div>
     <button class="switch" id="btnAlerteDanger" aria-pressed="true"></button>
-  </div>
-  <div class="carte row">
-    <div><b>Langue</b><div class="meta">Language · Idioma</div></div>
-    <select id="langue" class="pays-choix" aria-label="Langue · Language · Idioma"><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
   </div>
   <div class="carte row">
     <div><b>Style Studio</b><div class="meta">Sombre, épuré, animé, façon logiciel de création</div></div>

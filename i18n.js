@@ -135,6 +135,8 @@ const T = {
   "↘ La pression va baisser de {n} hPa en 3 h : surveille le ciel.": ["↘ Pressure will fall {n} hPa in 3 h: watch the sky.", "↘ La presión bajará {n} hPa en 3 h: vigila el cielo."],
   "→ La pression reste stable sur 3 h : pas de dégradation prévue.": ["→ Pressure steady over 3 h: no worsening expected.", "→ La presión se mantiene estable 3 h: no se prevé empeoramiento."],
   "Pas de météo récente : télécharge-la dès que tu as du réseau.": ["No recent weather: download it as soon as you have a connection.", "Sin tiempo reciente: descárgalo en cuanto tengas red."],
+  "{v} est à {d} vers le {c}. Si quelqu'un sait où tu es, reste visible sur place.": ["{v} is {d} away to the {c}. If someone knows where you are, stay visible where you are.", "{v} está a {d} hacia el {c}. Si alguien sabe dónde estás, quédate visible donde estás."],
+  "Mentions légales": ["Legal notice (in French)", "Aviso legal (en francés)"],
   "Pays": ["Country", "País"],
   "hab.": ["inhab.", "hab."],
   "Carte d'un pays entier": ["Map of a whole country", "Mapa de un país entero"],

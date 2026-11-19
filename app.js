@@ -99,7 +99,8 @@ function demarrerGps() {
 $('#btnGps').onclick = demarrerGps;
 
 function onPos(p) {
-  pos = p;
+  const premier = !pos; pos = p;
+  if (premier && document.documentElement.classList.contains('survie')) setTimeout(coach); // la carte rouge passe tout de suite au conseil suivant
   const [la, lo] = ici();
   $('#coords').textContent = `${la.toFixed(5)}, ${lo.toFixed(5)}`;
   const alt = p.coords.altitude != null ? t(' · altitude {n} m', { n: Math.round(p.coords.altitude) }) : '';
@@ -1233,8 +1234,11 @@ majSmsProches();
 // ---------- Guide ----------
 let catSel = null;
 const ICO_CAT = { urgence: 'sos', nuit: 'tente', eau: 'goutte', feu: 'flamme', manger: 'couverts', soins: 'croix', montagne: 'montagne', orient: 'comp', signal: 'drapeau', animaux: 'patte', potager: 'pousse', voyage: 'valise', mer: 'ancre', meteo: 'eclaircie' };
-$('#cats').innerHTML = `<button class="chip on" data-cat="">${pic('grille')} Tout</button>` + Object.entries(CATS).map(([k, v]) => `<button class="chip" data-cat="${k}">${pic(ICO_CAT[k] || 'book')} ${v}</button>`).join('')
-  + `<button class="chip" data-cat="wiki">${pic('globe')} Wikipédia</button>`;
+// Couleur de chaque icône (blanche quand la puce est choisie)
+const COUL_CAT = { tout: '#0A84FF', urgence: '#FF3B30', nuit: '#5E5CE6', eau: '#0A84FF', feu: '#FF453A', manger: '#FFD60A', soins: '#FF2D55', montagne: '#A2845E', orient: '#30B0C7', signal: '#FF375F', animaux: '#AC8E68', potager: '#34C759', voyage: '#BF5AF2', mer: '#64D2FF', meteo: '#FFD60A', wiki: '#8E8E93' };
+const picC = (n, col) => pic(n).replace('<svg ', `<svg style="color:${col}" `);
+$('#cats').innerHTML = `<button class="chip on" data-cat="">${picC('grille', COUL_CAT.tout)} Tout</button>` + Object.entries(CATS).map(([k, v]) => `<button class="chip" data-cat="${k}">${picC(ICO_CAT[k] || 'book', COUL_CAT[k] || '#8E8E93')} ${v}</button>`).join('')
+  + `<button class="chip" data-cat="wiki">${picC('globe', COUL_CAT.wiki)} Wikipédia</button>`;
 $('#cats').onclick = e => { const c = e.target.closest('.chip'); if (!c) return; catSel = c.dataset.cat || null; $$('#cats .chip').forEach(x => x.classList.toggle('on', x === c)); majFiches(); };
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const texte = f => norm(f.titre + ' ' + f.mots + ' ' + f.corps.replace(/<[^>]+>/g, ' '));
@@ -1719,11 +1723,12 @@ const RADIOS = {
 };
 const STATIONS = Object.assign({}, ...Object.values(RADIOS).map(g => g[1]));
 // Icônes maison (pas les logos des radios, qui sont des marques)
-const ICO_RADIO = { franceinfo: 'info', franceinter: 'micro', rfi: 'globe', europe1: 'antenne', rtl: 'poste', rmc: 'ballon', bfm: 'courbe', sud: 'soleil', fip: 'note', franceculture: 'plume', mouv: 'casque', francemusique: 'notes' };
+// Vrais logos des radios (Wikimedia Commons, domaine public), gardés dans l'app pour marcher hors ligne
+const LOGO_RADIO = k => `radios/${k}.${k === 'europe1' ? 'png' : 'svg'}`;
 const lecteur = new Audio();
 let radioOn = null;
 $('#radios').innerHTML = Object.values(RADIOS).map(([titre, st]) => `<div class="meta radio-groupe">${titre}</div>
-  <div class="chips">${Object.entries(st).map(([k, v]) => `<button class="chip" data-r="${k}">${pic(ICO_RADIO[k] || 'poste')} ${v[0]}</button>`).join('')}</div>`).join('');
+  <div class="chips">${Object.entries(st).map(([k, v]) => `<button class="chip chip-radio" data-r="${k}"><img class="logo-radio" src="${LOGO_RADIO(k)}" alt=""> ${v[0]}</button>`).join('')}</div>`).join('');
 function majRadio(t) {
   $$('#radios .chip').forEach(c => c.classList.toggle('on', c.dataset.r === radioOn));
   $('#radioEtat').textContent = t || (radioOn ? `● En direct · ~${STATIONS[radioOn][2]} Mo/h` : 'Par les données cellulaires');
@@ -1770,14 +1775,6 @@ function consignes() {
   // Alertes météo (orage, chute de pression, coup de vent) en premier : ce sont les plus urgentes
   const M = S.meteo, mi = M ? indexHeure(M) : -1;
   if (mi >= 0) for (const a of alertesMeteo(M, mi, 6)) c.push(['meteo' + a.slice(0, 3), a + t('. Mets-toi à l\'abri à temps.'), [['Orage et foudre', () => ouvrirFiche('orage')]]]);
-  // Sans alerte : la tendance de la pression (vraies prévisions téléchargées), au même endroit
-  if (mi >= 0 && !c.length) {
-    const p = M.h.pressure_msl, d3 = Math.round(p[Math.min(mi + 3, p.length - 1)] - p[mi]);
-    c.push(['meteo-tendance', d3 >= 1 ? t('↗ La pression va monter de {n} hPa en 3 h : le temps s\'améliore.', { n: d3 })
-      : d3 <= -1 ? t('↘ La pression va baisser de {n} hPa en 3 h : surveille le ciel.', { n: -d3 })
-      : t('→ La pression reste stable sur 3 h : pas de dégradation prévue.'), [['Orage et foudre', () => ouvrirFiche('orage')]]]);
-  }
-  if (mi < 0) c.push(['meteo-vide', t('Pas de météo récente : télécharge-la dès que tu as du réseau.'), [['Télécharger la météo', () => { ouvrir('situation'); $('#btnMeteo').click(); }]]]);
   if (!pos) c.push(['gps', 'Active ta position : sors à découvert et attends le signal GPS.', [['Activer le GPS', demarrerGps]]]);
   if (!S.points.length && pos) c.push(['camp', 'Marque ta position actuelle : tu pourras toujours y revenir.', [['Marquer ce point', () => $('#btnMarquer').click()]]]);
   if (batterie && !batterie.charging && batterie.level < .2) c.push(['bat', `Batterie à ${Math.round(batterie.level * 100)} %. Mode avion, luminosité au minimum, téléphone contre toi.`, []]);
@@ -1786,6 +1783,7 @@ function consignes() {
   if (now - derniereGorgee > 2 * 3600e3) c.push(['eau', 'Ça fait 2 heures. Bois quelques gorgées.', [['J\'ai bu', () => { derniereGorgee = Date.now(); refusConsignes.delete('eau'); coach(); }], ['Trouver de l\'eau', () => ouvrirFiche('eau-trouver')]]]);
   const tdn = $('#tendance');
   if (tdn.classList.contains('mal')) c.push(['loin', `Tu t'éloignes de ${dernierVillage?.p[0] || 'la civilisation'}. Arrête-toi et regarde la flèche.`, [['Je suis perdu', () => ouvrirFiche('perdu')]]]);
+  if (dernierVillage) c.push(['civi', t('{v} est à {d} vers le {c}. Si quelqu\'un sait où tu es, reste visible sur place.', { v: dernierVillage.p[0], d: fmtDist(dernierVillage.d), c: cardinal(dernierVillage.cap) }), [['Signaux de détresse', () => ouvrirFiche('signaux')]]]);
   c.push(['stop', 'Respire. Fais le point : eau, nourriture, chaleur, blessures.', [['Les priorités', () => ouvrirFiche('priorites')]]]);
   return c.filter(x => !refusConsignes.has(x[0]));
 }
@@ -1795,7 +1793,7 @@ function coach() {
   const [cur] = consignes();
   if (!cur) return;
   const [id, msg, actions] = cur;
-  $('#coachMsg').textContent = msg;
+  if (coach.dernier !== msg) { coach.dernier = msg; const m = $('#coachMsg'); m.textContent = msg; m.classList.remove('neuf'); void m.offsetWidth; m.classList.add('neuf'); }
   const box = $('#coachActions'); box.innerHTML = '';
   [...actions, ['Compris', () => { refusConsignes.add(id); coach(); }]].forEach(([t, fn], i) => {
     const b = document.createElement('button'); b.className = 'btn petit' + (i === 0 ? ' primaire' : ''); b.textContent = t; b.onclick = fn; box.append(b);
@@ -1804,13 +1802,16 @@ function coach() {
 }
 
 // ---------- Premier lancement : avertissement de sécurité, âge et conditions (une fois) ----------
-if (S.averti !== '2026-11-19') {
-  popup(`<div class="k">Avant de commencer</div><h2>T’es où ? t'aide, il ne te sauve pas</h2>
+// Page d'accueil à chaque ouverture (demande d'Aziz) : choix de la langue, avertissement, conditions
+{
+  popup(`<div class="chips langues" style="margin-bottom:14px">${[['fr', 'Français'], ['en', 'English'], ['es', 'Español']].map(([l, n]) => `<button class="chip${l === LANGUE ? ' on' : ''}" data-l="${l}">${n}</button>`).join('')}</div><div class="k">Avant de commencer</div><h2>T’es où ? t'aide, il ne te sauve pas</h2>
     <p><b>En danger, appelle le 112.</b> T’es où ? ne prévient pas les secours à ta place. Les refuges, dangers, itinéraires, la météo et les réponses de l'IA peuvent être faux ou anciens : vérifie sur place et garde une carte et une boussole.</p>
     <p>Utilisation seul à partir de 15 ans ; avant, avec l'accord d'un parent. Ne touche pas ton téléphone en conduisant.</p>
     <p class="note">En continuant, tu acceptes les <a href="legal.html#cgu" target="_blank" rel="noopener">conditions d'utilisation</a>. Tes données restent dans ton téléphone : <a href="legal.html#confidentialite" target="_blank" rel="noopener">confidentialité</a>.</p>
-    <button class="btn primaire large" id="btnAverti">J'ai compris</button>`);
+    <button class="btn primaire large" id="btnAverti">J'ai compris</button>
+    <p class="note" style="text-align:center;margin-top:12px"><a href="legal.html" target="_blank" rel="noopener">Mentions légales</a></p>`);
   $('#btnAverti').onclick = () => { S.averti = '2026-11-19'; save(); modal.close(); };
+  $('#modalBody .langues').onclick = e => { const l = e.target.closest('[data-l]')?.dataset.l; if (l && l !== LANGUE) { S.langue = l; save(); location.reload(); } };
 }
 
 // Choix de la langue (onglet Moi) : l'app se recharge dans la nouvelle langue
