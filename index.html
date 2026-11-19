@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="T’es où ?">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="vendor/leaflet.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -192,6 +193,7 @@
         <button id="btnReglagesCarte" class="plan-btn" aria-haspopup="dialog" aria-label="Réglages de la carte"><svg aria-hidden="true"><use href="#i-reglages"/></svg></button>
         <button id="btnPlein" class="plan-btn" aria-label="Carte en plein écran" aria-pressed="false">⤢</button>
       </div>
+      <p class="plan-calcul" id="plan2DErreur" role="status" hidden>Fond de carte indisponible. Vérifie ta connexion Internet.</p>
       <p class="plan-calcul" id="planCalcul" role="status" hidden></p>
     </div>
     <div class="plan-bas">
@@ -211,6 +213,7 @@
   <button class="plan-suite" id="planSuite"><span>⌄</span> Chercher un lieu · télécharger la carte</button>
   <div id="cartesHorsLigne" class="carte">
     <div class="k">Carte hors ligne</div>
+    <p class="meta" id="zone2DInfo" hidden>Le fond de carte 2D se charge avec Internet. Le téléchargement des cartes est disponible avec WebGL.</p>
     <p class="meta" id="zoneInfo">Cadre la zone de ta sortie sur la carte, puis télécharge-la : elle restera lisible sans réseau, en 2D comme en 3D.</p>
     <button class="btn large primaire" id="btnZone" style="margin-top:10px">Télécharger la zone affichée</button>
     <div class="k" style="margin-top:16px">Carte d'un pays entier</div>
@@ -522,6 +525,7 @@
 </dialog>
 
 <script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/leaflet.js" defer></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

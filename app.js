@@ -1,6 +1,7 @@
 import { distance, bearing, nearest, cardinal, fmtDist, dms, sunTimes, ecartAngle, devant, CARDINAUX, FMT } from './geo.js';
 import { DICT, CARDINAUX as CARDS } from './i18n.js';
 import { FICHES, CATS, risquesLocaux } from './guide.js';
+import { creerCarte2D } from './carte-2d.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -108,10 +109,13 @@ function demarrerGps() {
         afficherCalculCarte(t('Autorise la position dans ton navigateur pour démarrer le guidage.'));
       }
     }
-    const ios = /iPhone|iPad/.test(navigator.userAgent);
+    const ios = /iPhone|iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const mac = /Mac/.test(navigator.userAgent);
     $('#posMeta').textContent = e.code !== 1 ? 'Signal GPS faible : va dans un endroit dégagé.'
       : ios ? 'Localisation refusée. Réglages › Confidentialité et sécurité › Service de localisation › Sites web Safari : « Lorsque l\'app est active ». Puis Réglages › Apps › Safari › Localisation : « Demander ». Ferme et rouvre T’es où ?'
-      : 'Localisation refusée : Paramètres › Applications › Chrome › Autorisations › Position : « Autoriser ».';
+      : mac ? t('Localisation refusée. Sur Mac, autorise ton navigateur dans Réglages Système › Confidentialité et sécurité › Service de localisation. Dans les paramètres du site, mets Position sur Autoriser, puis recharge la page.')
+      : /Android/.test(navigator.userAgent) ? 'Localisation refusée : Paramètres › Applications › Chrome › Autorisations › Position : « Autoriser ».'
+      : t('Localisation refusée. Autorise la position dans les paramètres de ce site, puis recharge la page.');
     $('#btnGps').hidden = false;
   }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
   $('#btnGps').hidden = true;
@@ -553,7 +557,7 @@ majTrace();
 const couchesLieux = ['poi_r1', 'poi_r7', 'poi_r20'];
 function majLieuxCarte() {
   couchesLieux.forEach(id => {
-    if (plan?.getLayer(id)) plan.setLayoutProperty(id, 'visibility', S.lieuxCarte === false ? 'none' : 'visible');
+    if (plan?.getLayer?.(id)) plan.setLayoutProperty(id, 'visibility', S.lieuxCarte === false ? 'none' : 'visible');
   });
 }
 let textesCarte = [];
@@ -585,30 +589,54 @@ function majPoliceCarte() {
 // Itinéraires : le choisi en violet foncé, les autres en violet clair (cachés pendant le guidage)
 const geoRoute = R => ({ type: 'FeatureCollection', features: !R ? [] : (guidage || !R.alts ? [{ geo: R.geo, i: R.choix || 0 }] : R.alts.map((a, i) => ({ geo: a.geo, i })))
   .map(a => ({ type: 'Feature', properties: { i: a.i, sel: a.i === (R.choix || 0) }, geometry: { type: 'LineString', coordinates: a.geo.map(lnglat) } })) });
+function marqueurPlan(ll, element, anchor, options) {
+  const position = lnglat(ll);
+  return plan.raster ? plan.marqueur(position, element, anchor)
+    : new maplibregl.Marker({ element, anchor, ...options }).setLngLat(position).addTo(plan);
+}
+const popupPlan = offset => plan.raster ? plan.popup(offset) : new maplibregl.Popup({ offset });
 function marqueur(ll, cls, html = '', anchor = 'center') {
   const el = document.createElement('div'); el.className = cls; el.innerHTML = html;
-  return new maplibregl.Marker({ element: el, anchor }).setLngLat(lnglat(ll)).addTo(plan);
+  return marqueurPlan(ll, el, anchor);
 }
 const marqueurDest = ll => marqueur(ll, 'plan-cible', '<div class="plan-dest-arrivee"></div>');
 
 function initPlan() {
   if (!carteVisible()) return;
-  if (!window.maplibregl) return $('#itiRes').textContent = 'La carte n\'a pas pu se charger.';
   if (plan) { redimensionnerPlan(); majMoiPlan(); majPointsPlan(); return; }
+  const conteneur = $('#plan'), centre = pos ? lnglat(ici()) : [2.4, 46.6], zoom = pos ? 14 : 5;
   try {
-    plan = new maplibregl.Map({ container: 'plan', style: urlStyle(), center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 60, attributionControl: { compact: true },
+    plan = new maplibregl.Map({ container: conteneur, style: urlStyle(), center: centre, zoom, maxPitch: 60, attributionControl: { compact: true },
       trackResize: !window.ResizeObserver,
       // Carte dans la page : un doigt fait défiler la page, deux doigts bougent la carte (en plein écran : un doigt suffit)
       cooperativeGestures: !$('.plan-wrap').classList.contains('plein'), locale: { 'CooperativeGesturesHandler.MobileHelpText': 'Deux doigts pour bouger la carte · un doigt pour faire défiler', 'CooperativeGesturesHandler.WindowsHelpText': 'Ctrl + molette pour zoomer', 'CooperativeGesturesHandler.MacHelpText': '⌘ + molette pour zoomer' } }); // 60° au plus : au-delà on voit le ciel en haut de l’écran (Aziz veut la carte sur tout l’écran)
   } catch {
-    // Vu le 17/11 : Chrome met sur liste noire les cartes graphiques des vieux Mac (Iris Pro, GT 750M) ; Safari, lui, affiche la carte
-    $('.plan-btns').hidden = true;
-    return $('#plan').innerHTML = `<div class="meta" style="padding:24px;line-height:1.5"><b style="color:var(--txt)">Ce navigateur refuse d'afficher la carte</b><br>
-      Il a coupé le WebGL, souvent sur les ordinateurs anciens. Ouvre T’es où ? dans <b>Safari</b> ou sur ton téléphone : la carte s'y affiche.<br><br>
-      Dans Chrome, tu peux essayer : tape <code>chrome://flags/#ignore-gpu-blocklist</code> dans la barre d'adresse, choisis « Enabled », puis relance Chrome.<br><br>
-      La boussole et l'itinéraire restent disponibles ici.</div>`;
+    conteneur.replaceChildren();
+    conteneur.classList.remove('maplibregl-map');
+    if (!window.L || !window.maplibregl) {
+      $('.plan-btns').hidden = true;
+      conteneur.classList.add('plan-indisponible');
+      conteneur.textContent = t('Carte indisponible. Recharge la page pour réessayer.');
+      return;
+    }
+    plan = creerCarte2D(conteneur, centre, zoom, {
+      texte: t,
+      choisirItineraire: i => { if (!guidage) choisirIti(i); },
+      etatTuiles: chargees => { $('#plan2DErreur').hidden = chargees; },
+    });
+    if ($('.plan-wrap').classList.contains('plein')) plan.cooperativeGestures.disable();
+    else plan.cooperativeGestures.enable();
+    $('#zone2DInfo').hidden = false;
+    $('#zoneInfo').hidden = true;
+    ['#btn3D', '#btnRelief', '#btnStyle'].forEach(id => { $(id).hidden = true; });
+    ['#btnZone', '#btnPays', '#paysChoix', '#regRelief', '#regStyle', '#regPolice', '#regLangueCarte']
+      .forEach(id => { $(id).disabled = true; });
+    $('#regChoisirZone').hidden = true;
+    $('#planSuite').lastChild.textContent = ' ' + t('Chercher un lieu');
+    majTraceCarte();
+    if (S.route) dessinerRoute(S.route, false);
   }
-  plan.on('style.load', () => { // à chaque style : on remet relief, itinéraire et réglages
+  if (!plan.raster) plan.on('style.load', () => { // à chaque style : on remet relief, itinéraire et réglages
     // Carte épurée (demande d'Aziz) : pas de bâtiments ni d'arrêts de transport ; seuls points affichés : essence, hôtels,
     // restaurants, hôpitaux (la classe « hospital » d'OpenMapTiles comprend les cliniques)
     // Ciel peint (sinon transparent = bande grise au-dessus de l'horizon en vue inclinée) : la carte remplit tout l'écran
@@ -650,9 +678,12 @@ function initPlan() {
   });
   plan.on('error', e => console.warn('carte', e.error?.message)); // hors ligne : morceaux manquants, la carte reste utilisable
   plan.on('click', e => {
-    if (guidage || e.originalEvent.target.closest?.('.maplibregl-marker')) return;
-    const { x, y } = e.point, alt = plan.getLayer('route-alt') && plan.queryRenderedFeatures([[x - 10, y - 10], [x + 10, y + 10]], { layers: ['route-alt'] })[0];
-    if (alt) return choisirIti(alt.properties.i); // toucher un autre itinéraire le choisit, comme dans les GPS
+    if (guidage || e.originalEvent?.target?.closest?.('.maplibregl-marker, .plan-2d-marqueur')) return;
+    if (plan.getLayer?.('route-alt')) {
+      const { x, y } = e.point;
+      const alt = plan.queryRenderedFeatures([[x - 10, y - 10], [x + 10, y + 10]], { layers: ['route-alt'] })[0];
+      if (alt) return choisirIti(alt.properties.i);
+    }
     const ll = [e.lngLat.lat, e.lngLat.lng], [v] = COMMUNES.length ? nearest(COMMUNES, ll) : [];
     choisirDest(ll, v ? t('Près de {v}', { v: `${v.p[0]} (${v.p[4]})` }) : t('Point sur la carte'));
   });
@@ -662,7 +693,7 @@ function initPlan() {
   plan.on('moveend', programmerPointsPlan);
   plan.on('resize', () => {
     if (!$('.plan-wrap').classList.contains('plein')) return;
-    if (guidage && suivre) plan.setPadding(margeGuidage());
+    if (guidage && suivre && !plan.raster) plan.setPadding(margeGuidage());
     else if (S.route && !carteManipulee && !$('#itiChoix').hidden) cadrerRoute(S.route);
   });
   if (window.ResizeObserver) new ResizeObserver(redimensionnerPlan).observe(plan.getContainer());
@@ -671,7 +702,7 @@ function initPlan() {
 $('#btnStyle').textContent = t(styleCarte()[1]);
 function changerStyleCarte(style) {
   S.styleCarte = style; save();
-  $('#btnStyle').textContent = t(styleCarte()[1]); plan?.setStyle(urlStyle());
+  $('#btnStyle').textContent = t(styleCarte()[1]); plan?.setStyle?.(urlStyle());
 }
 $('#btnStyle').onclick = () => changerStyleCarte(STYLES[(STYLES.indexOf(styleCarte()) + 1) % STYLES.length][0]);
 function pleinEcranCarte(actif) {
@@ -697,7 +728,7 @@ document.addEventListener('keydown', e => {
   if (guidage) arreterGuidage();
   else $('#btnPlein').click();
 });
-$('#planSuite').onclick = () => $('#planSuite').nextElementSibling.scrollIntoView({ behavior: 'smooth', block: 'start' });
+$('#planSuite').onclick = () => (plan?.raster ? $('#allerA') : $('#cartesHorsLigne')).scrollIntoView({ behavior: 'smooth', block: 'start' });
 // 2D = vue du dessus (à vol d'oiseau) ; 3D = carte inclinée avec le relief en volume et les bâtiments
 function vue3D(on) {
   en3D = on; $('#btn3D').textContent = on ? '2D' : '3D'; $('#btn3D').classList.toggle('on', on);
@@ -711,7 +742,7 @@ function vue3D(on) {
 $('#btn3D').onclick = () => vue3D(!en3D);
 function majRelief() {
   $('#btnRelief').classList.toggle('on', S.relief !== false);
-  if (plan?.getLayer('ombrage')) plan.setLayoutProperty('ombrage', 'visibility', S.relief === false ? 'none' : 'visible');
+  if (plan?.getLayer?.('ombrage')) plan.setLayoutProperty('ombrage', 'visibility', S.relief === false ? 'none' : 'visible');
 }
 $('#btnRelief').onclick = () => { S.relief = S.relief === false; save(); majRelief(); };
 $('#btnCentrer').onclick = () => { suivre = true; if (!pos) return demarrerGps(); if (guidage) return cadrerGuidage(); plan?.easeTo({ center: lnglat(ici()), zoom: Math.max(plan.getZoom(), 15) }); };
@@ -762,7 +793,7 @@ function demarrerGuidage() {
   guidage = true; departGuidage = Date.now(); resteGuidage = null; suivre = true; moiMk?.remove(); moiMk = null; anim = affiche = null;
   const el = document.createElement('div'); el.className = 'plan-nav';
   el.innerHTML = '<svg viewBox="0 0 40 40"><path d="M20 3 L35 35 L20 27 L5 35Z"/></svg>';
-  navMk = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(lnglat(ici())).addTo(plan);
+  navMk = marqueurPlan(ici(), el, 'center', { rotationAlignment: 'map', pitchAlignment: 'map' });
   $('#navBandeau').hidden = false; $('#itiChoix').hidden = true; $('#btnPlein').hidden = true; // pendant le guidage : toujours plein écran, on arrête avec la croix du bandeau vert
   pleinEcranCarte(true); afficherCalculCarte('');
   voixEtape = { depart: true }; horsRoute = false; dire(t('C\'est parti vers {n}.', { n: S.route.dest.nom }), true);
@@ -860,7 +891,7 @@ function boucleNav(t) {
   const dCap = ((vers.cap - de.cap + 540) % 360) - 180; // par le plus court
   affiche = { ll: [de.ll[0] + (vers.ll[0] - de.ll[0]) * k, de.ll[1] + (vers.ll[1] - de.ll[1]) * k], cap: (de.cap + dCap * k + 360) % 360 };
   navMk.setLngLat(lnglat(affiche.ll)).setRotation(affiche.cap);
-  if (suivre && !plan.isEasing()) plan.jumpTo({ center: lnglat(affiche.ll), bearing: affiche.cap });
+  if (suivre && (plan.raster ? k === 1 : !plan.isEasing())) plan.jumpTo({ center: lnglat(affiche.ll), bearing: affiche.cap });
   if (k < 1) rafNav = requestAnimationFrame(boucleNav);
 }
 $('#navStop').onclick = () => arreterGuidage();
@@ -886,10 +917,10 @@ function majPointsPlan() {
   };
   if (S.pointsCarte !== false) {
     for (const p of S.points) garder(p, () => marqueur([p.lat, p.lon], 'plan-mien')
-      .setPopup(new maplibregl.Popup({ offset: 10 }).setText(p.nom)));
+      .setPopup(popupPlan(10).setText(p.nom)));
   }
   for (const d of dangersActifs()) garder(d, () => {
-    const popup = new maplibregl.Popup({ offset: 14 });
+    const popup = popupPlan(14);
     popup.on('open', () => popup.setHTML(`<b>${SIGNALES[d.type][1]}</b><br>${t('Signalé {q} il y a {d}', { q: d.moi ? t('par toi') : d.par ? t('par {n}', { n: esc(d.par) }) : t('par ton groupe'), d: depuis(Date.now() - d.t) })}<br><button class="btn petit" data-suppr-danger="${esc(d.id)}">Plus là : retirer</button>`));
     return marqueur([d.lat, d.lon], 'plan-pt plan-danger', SIGNALES[d.type][0]).setPopup(popup.setText(SIGNALES[d.type][1]));
   });
@@ -900,7 +931,7 @@ function majPointsPlan() {
       if (!b.contains([p[3], p[2]])) continue;
       garder(p, () => {
         const [ico, lib] = TYPES[p[0]] || ['•', p[0]];
-        const popup = new maplibregl.Popup({ offset: 14 }).setHTML(`<b>${esc(p[1])}</b><br>${lib}${p[4] ? ' · ' + p[4] + ' m' : ''}`);
+        const popup = popupPlan(14).setHTML(`<b>${esc(p[1])}</b><br>${lib}${p[4] ? ' · ' + p[4] + ' m' : ''}`);
         return marqueur([p[2], p[3]], 'plan-pt', ico).setPopup(popup);
       });
       if (++n === 300) break;
@@ -932,7 +963,7 @@ function majZones() {
   if (z.length) $('#zoneInfo').textContent = t('Gardé dans le téléphone : {z}. Cadre une autre zone pour l\'ajouter.', { z: z.map(x => x.nom).join(', ') });
 }
 $('#btnZone').onclick = async () => {
-  if (!plan) return;
+  if (!plan || plan.raster) return;
   const info = $('#zoneInfo'), btn = $('#btnZone');
   if (btn.disabled || $('#btnPays').disabled) return;
   if (!navigator.onLine) return info.textContent = t('Il faut du réseau pour télécharger la carte.');
@@ -976,6 +1007,7 @@ fetch('data/pays.json').then(r => r.json()).then(p => {
 }).catch(() => {});
 $('#paysChoix').onchange = () => { S.pays = $('#paysChoix').value; save(); majPays(); };
 $('#btnPays').onclick = () => {
+  if (plan?.raster) return;
   const c = $('#paysChoix').value; if (!PAYS[c]) return;
   if (!navigator.onLine) return $('#zoneInfo').textContent = t('Il faut du réseau pour télécharger la carte.');
   const z = zoomPays(c), b = cadre(c), mo = Math.max(1, Math.round(nbTuiles(b, z) * .11));
@@ -1125,7 +1157,7 @@ const VIT = { car: { motorway: 115, trunk: 95, primary: 75, secondary: 65, terti
   foot: { motorway: 0, trunk: 0, primary: 4.5, secondary: 4.5, tertiary: 4.8, minor: 4.8, service: 4.8, track: 4.8, path: 4.5 } };
 const attendreCarte = ms => new Promise(ok => { let fini = false; const f = () => { if (!fini) { fini = true; ok(); } }; plan.once('idle', f); setTimeout(f, ms); });
 async function itiHorsLigne(dep, arr, mode) {
-  initPlan(); if (!plan) throw new Error('carte indisponible');
+  initPlan(); if (!plan || plan.raster) throw new Error('carte vectorielle indisponible');
   if (!plan.isStyleLoaded()) await new Promise(ok => { plan.once('style.load', ok); setTimeout(ok, 6000); });
   const src = Object.entries(plan.getStyle().sources).find(([, v]) => v.type === 'vector')?.[0];
   if (!src) throw new Error('carte non téléchargée');
@@ -1211,7 +1243,8 @@ async function calculerIti() {
   afficherCalculCarte($('#itiRes').textContent);
   $('#btnItiBoussole').hidden = false;
   // Sans réseau (ou serveur injoignable) : itinéraire calculé sur la carte téléchargée
-  const sansReseau = async raison => {
+  const sansReseau = async () => {
+    if (plan?.raster) return false;
     $('#itiRes').textContent = t('Pas de réseau : calcul sur la carte téléchargée…');
     afficherCalculCarte($('#itiRes').textContent);
     try {
@@ -1222,6 +1255,7 @@ async function calculerIti() {
   };
   if (!navigator.onLine && await sansReseau()) return;
   try {
+    if (!navigator.onLine && plan?.raster) throw new Error('En carte 2D, il faut Internet pour calculer un itinéraire.');
     // Le serveur gratuit ne propose qu'un trajet : on en demande deux autres qui passent par un point à gauche
     // et à droite de la ligne droite, et on garde ceux qui sont vraiment différents et pas trop longs (comme un GPS)
     // ponytail: variantes par point de passage, pas de vrais « alternatives » ; un serveur OSRM à nous si ça ne suffit pas
@@ -1259,9 +1293,10 @@ async function calculerIti() {
     if (id !== calcId) return;
     $('#itiGo').disabled = false;
     const d = distance(dep, dest.ll), raison = e.name === 'TimeoutError' ? 'le serveur ne répond pas, retouche « Y aller »' : e.message;
-    afficherCalculCarte(navigator.onLine ? t('Itinéraire impossible ({r}).', { r: t(raison) }) : t('Trajet non couvert par la carte téléchargée.'));
-    $('#itiRes').innerHTML = (navigator.onLine ? t('Itinéraire impossible ({r}).', { r: esc(t(raison)) }) : t('Pas de réseau, et la carte téléchargée ne couvre pas ce trajet (télécharge la zone dans l\'onglet Carte).'))
-      + t(' {n} est à {d} à vol d\'oiseau, direction {c}. La boussole peut t\'y guider en ligne droite.', { n: esc(dest.nom), d: fmtDist(d), c: cardinal(bearing(dep, dest.ll)) });
+    const message2D = !navigator.onLine && plan?.raster ? t('En carte 2D, il faut Internet pour calculer un itinéraire.') : '';
+    afficherCalculCarte(message2D || (navigator.onLine ? t('Itinéraire impossible ({r}).', { r: t(raison) }) : t('Trajet non couvert par la carte téléchargée.')));
+    const resume = message2D || (navigator.onLine ? t('Itinéraire impossible ({r}).', { r: esc(t(raison)) }) : t('Pas de réseau, et la carte téléchargée ne couvre pas ce trajet (télécharge la zone dans l\'onglet Carte).'));
+    $('#itiRes').innerHTML = resume + t(' {n} est à {d} à vol d\'oiseau, direction {c}. La boussole peut t\'y guider en ligne droite.', { n: esc(dest.nom), d: fmtDist(d), c: cardinal(bearing(dep, dest.ll)) });
   }
 }
 function dessinerRoute(R, cadrer) {
@@ -1300,7 +1335,7 @@ function majBulles(R) {
     const el = document.createElement('div'); el.className = 'iti-bulle' + (i === R.choix ? ' on' : '');
     el.innerHTML = duree(a.t * 1000) + (i === 0 ? '<small>Le plus rapide</small>' : '');
     el.onclick = ev => { ev.stopPropagation(); choisirIti(i); };
-    bulles.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(lnglat(pointEcarte(a.geo, R.alts[i ? 0 : 1].geo))).addTo(plan));
+    bulles.push(marqueurPlan(pointEcarte(a.geo, R.alts[i ? 0 : 1].geo), el, 'bottom'));
   });
 }
 function choisirIti(i) {
@@ -1970,7 +2005,7 @@ function ouvrirReglages(e) {
   boutonReglages = e.currentTarget;
   const zoneAffichee = carteVisible() && !!plan;
   $('#btnZone').hidden = !zoneAffichee;
-  $('#regChoisirZone').hidden = zoneAffichee;
+  $('#regChoisirZone').hidden = zoneAffichee || !!plan?.raster;
   $('#regCartesHorsLigne').append(cartesHorsLigne);
   $('#regStyle').value = styleCarte()[0];
   $('#regLangue').value = LANGUE;
