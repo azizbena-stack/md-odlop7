@@ -1961,11 +1961,16 @@ themeSysteme.addEventListener('change', appliquerTheme);
 setInterval(appliquerTheme, 60e3);
 appliquerTheme();
 
-// ---------- Réglages de la carte ----------
+// ---------- Réglages ----------
 const reglagesCarte = $('#reglagesCarte'), cartesHorsLigne = $('#cartesHorsLigne');
 const ancreCartesHorsLigne = document.createComment('Téléchargements de la carte');
 cartesHorsLigne.before(ancreCartesHorsLigne);
-$('#btnReglagesCarte').onclick = () => {
+let boutonReglages = null;
+function ouvrirReglages(e) {
+  boutonReglages = e.currentTarget;
+  const zoneAffichee = carteVisible() && !!plan;
+  $('#btnZone').hidden = !zoneAffichee;
+  $('#regChoisirZone').hidden = zoneAffichee;
   $('#regCartesHorsLigne').append(cartesHorsLigne);
   $('#regStyle').value = styleCarte()[0];
   $('#regLangue').value = LANGUE;
@@ -1983,12 +1988,21 @@ $('#btnReglagesCarte').onclick = () => {
   majListeVoix();
   majVoix();
   reglagesCarte.showModal();
+  reglagesCarte.querySelector('.reglages-corps').scrollTop = 0;
   if ($('#regCache').open) majCacheCarte();
-};
+}
+$('#btnReglages').onclick = $('#btnReglagesCarte').onclick = ouvrirReglages;
 $('#fermerReglagesCarte').onclick = () => reglagesCarte.close();
+$('#regChoisirZone').onclick = () => {
+  reglagesCarte.close();
+  ouvrir('carte');
+};
 reglagesCarte.addEventListener('close', () => {
+  if (reglagesCarte.open) return;
   ancreCartesHorsLigne.after(cartesHorsLigne);
-  $('#btnReglagesCarte').focus({ preventScroll: true });
+  $('#btnZone').hidden = false;
+  boutonReglages?.focus({ preventScroll: true });
+  boutonReglages = null;
 });
 $('#regStyle').onchange = e => changerStyleCarte(e.target.value);
 $('#regLangue').onchange = e => { $('#langue').value = e.target.value; $('#langue').onchange(); };

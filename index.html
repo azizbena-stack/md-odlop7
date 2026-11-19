@@ -84,7 +84,12 @@
     <img src="icon.svg" alt="" width="34" height="34">
     <div><b>T’es où ?</b><small id="etatReseau">Hors réseau prêt</small></div>
   </div>
-  <button id="btnSurvie" class="survie-toggle" aria-pressed="false"><span class="dot"></span>Mode survie</button>
+  <div class="top-actions">
+    <button id="btnSurvie" class="survie-toggle" aria-pressed="false"><span class="dot"></span>Mode survie</button>
+    <button id="btnReglages" class="reglages-toggle" aria-haspopup="dialog" aria-label="Réglages" title="Réglages">
+      <svg class="ic" aria-hidden="true"><use href="#i-reglages"/></svg>
+    </button>
+  </div>
 </header>
 
 <div id="coach" class="coach" hidden>
@@ -403,95 +408,116 @@
 <dialog id="modal"><button class="modal-x" id="modalX" aria-label="Fermer">✕</button><div id="modalBody"></div><button class="btn" id="modalFermer">Fermer</button></dialog>
 
 <dialog id="reglagesCarte" aria-labelledby="titreReglagesCarte">
-  <h2 id="titreReglagesCarte">Réglages de la carte</h2>
+  <h2 id="titreReglagesCarte">Réglages</h2>
   <button id="fermerReglagesCarte" class="modal-x" aria-label="Fermer" autofocus>✕</button>
   <div class="reglages-corps">
-    <details>
-      <summary>Source de cartes</summary>
-      <p class="meta">OpenFreeMap · données OpenStreetMap</p>
-      <label>Style de la carte
-        <select id="regStyle"><option value="auto">Auto</option><option value="liberty">Clair</option><option value="positron">Doux</option><option value="dark">Sombre</option><option value="fiord">Nuit</option></select>
-      </label>
-    </details>
-    <details>
-      <summary>Télécharger les cartes</summary>
-      <div id="regCartesHorsLigne"></div>
-    </details>
-    <details>
-      <summary>Éléments de la carte</summary>
-      <label class="reglages-case"><input type="checkbox" id="regRelief"> Ombrage du relief</label>
-      <label class="reglages-case"><input type="checkbox" id="regLieux"> Points d’intérêt et lieux proches</label>
-    </details>
-    <details>
-      <summary>Police et langue</summary>
-      <label>Taille des noms sur la carte
-        <select id="regPolice"><option value="1">Standard</option><option value="1.2">Grande</option><option value="1.4">Très grande</option></select>
-      </label>
-      <label>Langue des noms sur la carte
-        <select id="regLangueCarte"><option value="">Par défaut</option><option value="local">Noms locaux</option><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
-      </label>
-      <label>Langue de l’application
-        <select id="regLangue"><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
-      </label>
-      <p class="meta">Changer la langue redémarre l’application.</p>
-    </details>
-    <details id="regCache">
-      <summary>Cache des cartes</summary>
-      <p class="meta" id="regCacheInfo" role="status"></p>
-      <button class="btn" id="regCacheVider">Vider le cache de navigation</button>
-    </details>
-    <details>
-      <summary>Thème</summary>
-      <label>Style de l'app
-        <select id="regTheme"><option value="">Auto jour / nuit</option><option value="systeme">Système</option><option value="graphite">Studio graphite</option><option value="minuit">Studio minuit</option><option value="foret">Studio forêt</option><option value="prune">Studio prune</option></select>
-      </label>
-    </details>
-    <details>
-      <summary>Écran principal</summary>
-      <label>Onglet au démarrage
-        <select id="regAccueil"><option value="situation">Situation</option><option value="carte">Carte</option></select>
-      </label>
-    </details>
-    <details>
-      <summary>Traces et marqueurs</summary>
-      <label class="reglages-case"><input type="checkbox" id="regTrace"> Afficher mon parcours enregistré</label>
-      <label class="reglages-case"><input type="checkbox" id="regPoints"> Afficher mes marqueurs</label>
-    </details>
-    <details>
-      <summary>Verrouillage automatique</summary>
-      <label class="reglages-case"><input type="checkbox" id="regVerrouillage"> Laisser l’écran se verrouiller sur la carte</label>
-      <p class="meta" id="regVerrouillageInfo" role="status"></p>
-    </details>
-    <details>
-      <summary>Navigation</summary>
-      <label class="reglages-case"><input type="checkbox" id="regVoix"> Voix du guidage</label>
-      <label>Voix
-        <select id="regVoixChoix"></select>
-      </label>
-      <label>Débit de la voix
-        <select id="regDebit"><option value="0.85">Plus lent</option><option value="0.95">Naturel</option><option value="1.08">Plus rapide</option></select>
-      </label>
-      <button class="btn" id="regVoixEcouter">Écouter la voix</button>
-      <label class="reglages-case"><input type="checkbox" id="regDangers"> Alerte des dangers</label>
-    </details>
-    <details>
-      <summary>Sauvegarde des données</summary>
-      <p class="meta">Tes points et ton parcours sont dans le fichier JSON.</p>
-      <div class="reglages-actions">
-        <button class="btn" id="regExporter">Exporter</button>
-        <button class="btn" id="regImportBouton">Importer</button>
+    <section class="reglages-groupe" aria-labelledby="regTitreCartes">
+      <h3 id="regTitreCartes">Cartes</h3>
+      <div class="reglages-options">
+        <details>
+          <summary>Source de cartes</summary>
+          <p class="meta">OpenFreeMap · données OpenStreetMap</p>
+          <label>Style de la carte
+            <select id="regStyle"><option value="auto">Auto</option><option value="liberty">Clair</option><option value="positron">Doux</option><option value="dark">Sombre</option><option value="fiord">Nuit</option></select>
+          </label>
+        </details>
+        <details>
+          <summary>Télécharger les cartes</summary>
+          <button type="button" class="btn" id="regChoisirZone" hidden>Afficher la carte pour choisir une zone</button>
+          <div id="regCartesHorsLigne"></div>
+        </details>
+        <details>
+          <summary>Éléments de la carte</summary>
+          <label class="reglages-case"><input type="checkbox" id="regRelief"> Ombrage du relief</label>
+          <label class="reglages-case"><input type="checkbox" id="regLieux"> Points d’intérêt et lieux proches</label>
+        </details>
+        <details>
+          <summary>Police et langue</summary>
+          <label>Taille des noms sur la carte
+            <select id="regPolice"><option value="1">Standard</option><option value="1.2">Grande</option><option value="1.4">Très grande</option></select>
+          </label>
+          <label>Langue des noms sur la carte
+            <select id="regLangueCarte"><option value="">Par défaut</option><option value="local">Noms locaux</option><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
+          </label>
+          <label>Langue de l’application
+            <select id="regLangue"><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select>
+          </label>
+          <p class="meta">Changer la langue redémarre l’application.</p>
+        </details>
+        <details id="regCache">
+          <summary>Cache des cartes</summary>
+          <p class="meta" id="regCacheInfo" role="status"></p>
+          <button class="btn" id="regCacheVider">Vider le cache de navigation</button>
+        </details>
       </div>
-      <input id="regImporter" type="file" accept=".json,application/json" hidden>
-      <p class="meta" id="regImportInfo" role="status"></p>
-    </details>
-    <details>
-      <summary>Format des unités</summary>
-      <label>Distances terrestres
-        <select id="regUnites"><option value="metrique">Mètres et kilomètres</option><option value="imperial">Pieds et miles</option></select>
-      </label>
-    </details>
-    <a class="reglages-lien" href="legal.html#confidentialite" target="_blank" rel="noopener">Confidentialité</a>
-    <a class="reglages-lien" href="aide-carte.html" target="_blank" rel="noopener">Manuel d’utilisation en ligne</a>
+    </section>
+    <section class="reglages-groupe" aria-labelledby="regTitreApparence">
+      <h3 id="regTitreApparence">Apparence</h3>
+      <div class="reglages-options">
+        <details>
+          <summary>Thème</summary>
+          <label>Style de l'app
+            <select id="regTheme"><option value="">Auto jour / nuit</option><option value="systeme">Système</option><option value="graphite">Studio graphite</option><option value="minuit">Studio minuit</option><option value="foret">Studio forêt</option><option value="prune">Studio prune</option></select>
+          </label>
+        </details>
+        <details>
+          <summary>Écran principal</summary>
+          <label>Onglet au démarrage
+            <select id="regAccueil"><option value="situation">Situation</option><option value="carte">Carte</option></select>
+          </label>
+        </details>
+        <details>
+          <summary>Traces et marqueurs</summary>
+          <label class="reglages-case"><input type="checkbox" id="regTrace"> Afficher mon parcours enregistré</label>
+          <label class="reglages-case"><input type="checkbox" id="regPoints"> Afficher mes marqueurs</label>
+        </details>
+        <details>
+          <summary>Verrouillage automatique</summary>
+          <label class="reglages-case"><input type="checkbox" id="regVerrouillage"> Laisser l’écran se verrouiller sur la carte</label>
+          <p class="meta" id="regVerrouillageInfo" role="status"></p>
+        </details>
+      </div>
+    </section>
+    <section class="reglages-groupe" aria-labelledby="regTitreNavigation">
+      <h3 id="regTitreNavigation">Navigation et données</h3>
+      <div class="reglages-options">
+        <details>
+          <summary>Navigation</summary>
+          <label class="reglages-case"><input type="checkbox" id="regVoix"> Voix du guidage</label>
+          <label>Voix
+            <select id="regVoixChoix"></select>
+          </label>
+          <label>Débit de la voix
+            <select id="regDebit"><option value="0.85">Plus lent</option><option value="0.95">Naturel</option><option value="1.08">Plus rapide</option></select>
+          </label>
+          <button class="btn" id="regVoixEcouter">Écouter la voix</button>
+          <label class="reglages-case"><input type="checkbox" id="regDangers"> Alerte des dangers</label>
+        </details>
+        <details>
+          <summary>Sauvegarde des données</summary>
+          <p class="meta">Tes points et ton parcours sont dans le fichier JSON.</p>
+          <div class="reglages-actions">
+            <button class="btn" id="regExporter">Exporter</button>
+            <button class="btn" id="regImportBouton">Importer</button>
+          </div>
+          <input id="regImporter" type="file" accept=".json,application/json" hidden>
+          <p class="meta" id="regImportInfo" role="status"></p>
+        </details>
+        <details>
+          <summary>Format des unités</summary>
+          <label>Distances terrestres
+            <select id="regUnites"><option value="metrique">Mètres et kilomètres</option><option value="imperial">Pieds et miles</option></select>
+          </label>
+        </details>
+      </div>
+    </section>
+    <section class="reglages-groupe" aria-labelledby="regTitreAide">
+      <h3 id="regTitreAide">Aide</h3>
+      <div class="reglages-options">
+        <a class="reglages-lien" href="legal.html#confidentialite" target="_blank" rel="noopener">Confidentialité</a>
+        <a class="reglages-lien" href="aide-carte.html" target="_blank" rel="noopener">Manuel d’utilisation en ligne</a>
+      </div>
+    </section>
   </div>
 </dialog>
 

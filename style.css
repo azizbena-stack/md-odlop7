@@ -52,8 +52,14 @@ a { color: inherit; text-decoration: none; }
   background: var(--barre); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: .5px solid var(--ligne);
 }
-.brand { display: flex; gap: 10px; align-items: center; }
-.brand img { border-radius: 8px; }
+.brand { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.brand img { border-radius: 8px; flex: none; }
+.top-actions { display: flex; flex: none; align-items: center; gap: 8px; margin-inline-start: 8px; }
+.reglages-toggle {
+  display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 14px;
+  background: var(--bg2); color: var(--accent); cursor: pointer;
+}
+.reglages-toggle .ic { width: 22px; height: 22px; }
 .brand b { font-size: 17px; font-weight: 600; display: block; line-height: 1.1; }
 .brand small { color: var(--ok); font-size: 12px; font-weight: 500; }
 .brand small.off { color: var(--txt2); }
@@ -631,14 +637,27 @@ body, .carte, .top, .tabs, .chip, .btn, #fiches li { transition: background-colo
 @keyframes titreArrive { from { opacity: 0; transform: translateX(-16px); } }
 @keyframes respireTexte { 50% { transform: scale(1.04); } }
 
-/* Réglages de la carte */
+/* Réglages */
 #reglagesCarte { padding: 18px; max-height: min(86dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px)); }
 #reglagesCarte h2 { margin: 0 44px 14px 0; font-size: 23px; }
 .reglages-corps { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 2px; }
-.reglages-corps details, .reglages-lien { display: block; margin-bottom: 5px; padding: 0 12px; background: var(--bg2); border-radius: 10px; }
-.reglages-corps details[open] { padding-bottom: 10px; }
-.reglages-corps summary, .reglages-lien { padding: 11px 12px; cursor: pointer; font-weight: 600; }
-.reglages-corps summary { margin: 0 -12px; }
+.reglages-groupe + .reglages-groupe { margin-top: 18px; }
+.reglages-groupe h3 { margin: 0 4px 6px; color: var(--txt2); font-size: 14px; font-weight: 600; }
+.reglages-options { background: var(--bg2); border: 1px solid var(--ligne); border-radius: 14px; }
+.reglages-options > * + * { border-top: 1px solid var(--ligne); }
+.reglages-options details { padding: 0 14px; }
+.reglages-options details[open] { padding-bottom: 10px; }
+.reglages-options summary, .reglages-lien {
+  display: block; position: relative; padding: 12px 36px 12px 14px; cursor: pointer; font-weight: 600;
+}
+.reglages-options summary { margin: 0 -14px; list-style: none; }
+.reglages-options summary::-webkit-details-marker { display: none; }
+.reglages-options summary::after {
+  content: ''; position: absolute; right: 16px; top: 50%; width: 7px; height: 7px;
+  border-right: 2px solid var(--txt2); border-bottom: 2px solid var(--txt2); transform: translateY(-65%) rotate(45deg);
+}
+.reglages-options details[open] > summary::after { transform: translateY(-30%) rotate(225deg); }
+.reglages-options :is(summary, .reglages-lien):focus-visible { outline-offset: -3px; }
 .reglages-corps p { margin: 6px 0; overflow-wrap: anywhere; }
 .reglages-corps label { display: block; margin: 8px 0; font-size: 15px; }
 .reglages-corps select { display: block; width: 100%; margin-top: 4px; min-height: 39px; border: 1px solid var(--ligne); border-radius: 8px; background: var(--surface); color: var(--txt); padding: 4px 8px; font: inherit; }
