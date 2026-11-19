@@ -55,7 +55,11 @@ export function creerCarte2D(conteneur, centre, zoom, { texte, choisirItineraire
     getZoom: () => carte.getZoom(),
     getBounds: () => {
       const cadre = carte.getBounds();
-      return { contains: point => cadre.contains(latlng(point)) };
+      return {
+        contains: point => cadre.contains(latlng(point)),
+        getWest: () => cadre.getWest(), getEast: () => cadre.getEast(),
+        getSouth: () => cadre.getSouth(), getNorth: () => cadre.getNorth(),
+      };
     },
     getBearing: () => 0,
     getSource: nom => sources[nom],

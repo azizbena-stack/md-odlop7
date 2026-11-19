@@ -34,6 +34,11 @@
   <symbol id="i-danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4.3L2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4.5"/><path d="M12 17.5v.01" stroke-width="2.6"/></symbol>
   <symbol id="i-ancre" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v14"/><path d="M5 13a7 7 0 0 0 14 0"/><path d="M8.5 10h7"/></symbol>
   <symbol id="i-bouee" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M5.6 5.6l3.6 3.6M14.8 14.8l3.6 3.6M18.4 5.6l-3.6 3.6M9.2 14.8l-3.6 3.6"/></symbol>
+  <symbol id="i-lit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14m18 0v-6a3 3 0 0 0-3-3H10v6m-7 0h18M7 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></symbol>
+  <symbol id="i-parking" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></symbol>
+  <symbol id="i-avion" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 0 1.7 1 1.7 2v4L21 14v2l-7.3-2v4l2 1.5V21l-3.7-1-3.7 1v-1.5l2-1.5v-4L3 16v-2l7.3-5V5c0-1 .7-2 1.7-2Z"/></symbol>
+  <symbol id="i-virage" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-8a4 4 0 0 1 4-4h10m-4-4 4 4-4 4"/></symbol>
+  <symbol id="i-rond-point" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 10a7 7 0 1 0-2 7m2-11v4h-4m-3 9v3"/></symbol>
   <symbol id="i-village" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"/><path d="M4 20v-7l4-3.5 4 3.5v7"/><path d="M12 20V10l4-3.5 4 3.5v10"/><path d="M7 20v-3h2v3"/></symbol>
   <symbol id="i-arbre" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21h20"/><path d="M5 19l7.5-4.5"/><circle cx="16" cy="11.5" r="4.5"/><path d="M8 21l1-2.5"/></symbol>
   <symbol id="i-trou" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="14" rx="9.5" ry="4.5"/><ellipse cx="12" cy="15" rx="5" ry="2" fill="currentColor"/></symbol>
@@ -185,10 +190,10 @@
         <button id="navVoix" aria-label="Couper la voix"><svg class="ic"><use href="#i-son"/></svg></button>
         <button id="navStop" aria-label="Arrêter le guidage">✕</button>
       </div>
-      <dl class="iti-horaires" id="itiHoraires" hidden>
-        <div><dt>Départ</dt><dd><time id="itiDepart"></time></dd></div>
-        <div><dt>Arrivée estimée</dt><dd><time id="itiArrivee"></time></dd></div>
-      </dl>
+      <div class="nav-virage" id="navVirage" role="status" hidden>
+        <svg class="ic" aria-hidden="true"><use href="#i-virage"/></svg>
+        <div><b id="navVirageDistance" aria-hidden="true"></b><span id="navVirageTexte"></span></div>
+      </div>
       <div class="plan-haut-actions">
         <button id="btnReglagesCarte" class="plan-btn" aria-haspopup="dialog" aria-label="Réglages de la carte"><svg aria-hidden="true"><use href="#i-reglages"/></svg></button>
         <button id="btnPlein" class="plan-btn" aria-label="Carte en plein écran" aria-pressed="false">⤢</button>
@@ -208,6 +213,10 @@
         <div id="itiListe"></div>
         <div class="iti-actions"><button class="btn" id="itiFermer">Fermer</button><button class="btn primaire" id="itiGo">Y aller</button></div>
       </div>
+      <dl class="iti-horaires" id="itiHoraires" hidden>
+        <div><dt>Départ</dt><dd><time id="itiDepart"></time></dd></div>
+        <div><dt>Arrivée estimée</dt><dd><time id="itiArrivee"></time></dd></div>
+      </dl>
     </div>
   </div>
   <button class="plan-suite" id="planSuite"><span>⌄</span> Chercher un lieu · télécharger la carte</button>

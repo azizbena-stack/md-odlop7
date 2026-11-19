@@ -2,6 +2,7 @@ import { distance, bearing, nearest, cardinal, fmtDist, dms, sunTimes, ecartAngl
 import { DICT, CARDINAUX as CARDS } from './i18n.js';
 import { FICHES, CATS, risquesLocaux } from './guide.js';
 import { creerCarte2D } from './carte-2d.js';
+import { lieuxDesTuiles, tuilesLieux } from './lieux-carte.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -555,6 +556,26 @@ function majTraceCarte() {
 }
 majTrace();
 const couchesLieux = ['poi_r1', 'poi_r7', 'poi_r20'];
+const LIEUX_CARTE = {
+  hotel: [pic('lit', 'c-hotel'), 'Hôtel'],
+  restaurant: [pic('couverts', 'c-restaurant'), 'Restaurant'],
+  camping: [pic('tente', 'c-camping'), 'Camping'],
+  parking: [pic('parking', 'c-parking'), 'Parking'],
+  aeroport: [pic('avion', 'c-aeroport'), 'Aéroport'],
+};
+let cleLieuxVue = '', lieuxVue = [];
+function actualiserLieuxCarte(cadre, zoom) {
+  const tuiles = zoom >= 11 ? tuilesLieux(cadre, zoom) : [];
+  const cle = tuiles.map(tuile => tuile.join('/')).join(' ');
+  if (cle === cleLieuxVue) return;
+  cleLieuxVue = cle;
+  if (!cle) { lieuxVue = []; return; }
+  lieuxDesTuiles(tuiles).then(lieux => {
+    if (cleLieuxVue !== cle) return;
+    lieuxVue = lieux;
+    majPointsPlan();
+  });
+}
 function majLieuxCarte() {
   couchesLieux.forEach(id => {
     if (plan?.getLayer?.(id)) plan.setLayoutProperty(id, 'visibility', S.lieuxCarte === false ? 'none' : 'visible');
@@ -649,7 +670,7 @@ function initPlan() {
     ['building', 'building-3d', 'poi_transit'].forEach(id => plan.getLayer(id) && plan.setLayoutProperty(id, 'visibility', 'none'));
     couchesLieux.forEach(id => {
       if (!plan.getLayer(id)) return;
-      const filtre = ['match', ['get', 'class'], ['fuel', 'lodging', 'restaurant', 'fast_food', 'hospital'], true, false];
+      const filtre = ['match', ['get', 'class'], ['fuel', 'hospital'], true, false];
       const existant = plan.getFilter(id);
       plan.setFilter(id, existant ? ['all', existant, filtre] : filtre);
       plan.setLayerZoomRange(id, 13, 24); // ils sont peu nombreux : on peut les montrer plus tôt
@@ -781,7 +802,7 @@ setInterval(majHoraires, 30000);
 
 let guidage = false, navMk = null, cumul = [], cumulPour = null, idxEtapes = [], dernierI = 0;
 // Caméra du guidage : inclinée, route vers le haut ; ensuite elle suit la flèche image par image (boucleNav)
-const margeGuidage = () => ({ top: Math.round(plan.getContainer().clientHeight * .45), bottom: 0, left: 0, right: 0 });
+const margeGuidage = () => ({ top: Math.round(plan.getContainer().clientHeight * .32), bottom: $('#itiHoraires').offsetHeight + 18, left: 0, right: 0 });
 function cadrerGuidage() {
   suivre = true;
   plan.easeTo({ center: lnglat(affiche?.ll || ici()), bearing: affiche?.cap ?? plan.getBearing(), pitch: 58, zoom: 17, duration: 800,
@@ -803,7 +824,7 @@ function demarrerGuidage() {
 function arreterGuidage(msg) {
   if (!msg) stopperVoix();
   guidage = false; departGuidage = resteGuidage = null; navMk?.remove(); navMk = null; anim = affiche = null; cancelAnimationFrame(rafNav); rafNav = 0;
-  $('#navBandeau').hidden = true; $('#btnPlein').hidden = false; if (S.route) dessinerRoute(S.route, false);
+  $('#navBandeau').hidden = true; $('#navVirage').hidden = true; $('#btnPlein').hidden = false; if (S.route) dessinerRoute(S.route, false);
   pleinEcranCarte(false);
   plan?.easeTo({ pitch: en3D ? 60 : 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 } });
   majMoiPlan(); if (msg) { $('#itiRes').textContent = msg; afficherCalculCarte(msg); }
@@ -818,7 +839,7 @@ function preparerRoute(R) {
   idxEtapes = (R.etapes || []).filter(e => e[2]).map(e => {
     let b = k, db = Infinity;
     for (let i = k; i < R.geo.length; i++) { const d = distance(e[2], R.geo[i]); if (d < db) { db = d; b = i; } if (db < 5) break; }
-    k = b; return { t: e[0], i: b };
+    k = b; return { t: e[0], i: b, direction: e[3] };
   });
 }
 // Projection d'un point sur un segment (repère plat local, suffisant à cette échelle)
@@ -858,7 +879,20 @@ function majGuidage() {
   const dEtape = prochaine ? cumul[prochaine.i] - progression + dmin : fin;
   $('#navConsigne').textContent = dmin > 60 ? 'Tu t\'écartes de l\'itinéraire : rejoins la ligne violette' : prochaine ? prochaine.t : 'Tout droit jusqu\'à l\'arrivée';
   $('#navDist').textContent = t('Dans {d} · arrivée à {f}', { d: fmtDist(dEtape), f: fmtDist(fin) });
+  afficherVirage(progression, dmin);
   annoncer(prochaine, dEtape, dmin);
+}
+function afficherVirage(progression, ecart) {
+  const fenetre = $('#navVirage');
+  const approche = ecart <= 60 && idxEtapes.find(e => e.direction && cumul[e.i] > progression + 2);
+  const restant = approche ? cumul[approche.i] - progression : Infinity;
+  fenetre.hidden = restant > 800;
+  if (fenetre.hidden) return;
+  const icon = approche.direction === 'rond-point' ? '#i-rond-point' : '#i-virage';
+  fenetre.dataset.direction = approche.direction;
+  fenetre.querySelector('use').setAttribute('href', icon);
+  $('#navVirageDistance').textContent = fmtDist(restant);
+  if ($('#navVirageTexte').textContent !== approche.t) $('#navVirageTexte').textContent = approche.t;
 }
 // Voix du guidage : une annonce « Dans 300 mètres, … » puis la consigne au moment de tourner (distances plus longues en voiture)
 let voixEtape = {}, horsRoute = false;
@@ -924,8 +958,26 @@ function majPointsPlan() {
     popup.on('open', () => popup.setHTML(`<b>${SIGNALES[d.type][1]}</b><br>${t('Signalé {q} il y a {d}', { q: d.moi ? t('par toi') : d.par ? t('par {n}', { n: esc(d.par) }) : t('par ton groupe'), d: depuis(Date.now() - d.t) })}<br><button class="btn petit" data-suppr-danger="${esc(d.id)}">Plus là : retirer</button>`));
     return marqueur([d.lat, d.lon], 'plan-pt plan-danger', SIGNALES[d.type][0]).setPopup(popup.setText(SIGNALES[d.type][1]));
   });
-  if (plan.getZoom() >= 11 && S.lieuxCarte !== false) {
+  const zoom = plan.getZoom(), afficherLieux = zoom >= 11 && S.lieuxCarte !== false;
+  if (afficherLieux) {
     const b = plan.getBounds();
+    actualiserLieuxCarte(b, zoom);
+    const comptes = {}, identifiants = new Set(), centre = plan.getCenter().lng;
+    for (const p of lieuxVue) {
+      if (p.type !== 'aeroport' && zoom < 13) continue;
+      const lon = p.lon + 360 * Math.round((centre - p.lon) / 360);
+      if (!b.contains([lon, p.lat]) || (comptes[p.type] || 0) >= 28) continue;
+      const id = p.type + '/' + p.lat.toFixed(5) + '/' + lon.toFixed(5);
+      if (identifiants.has(id)) continue;
+      identifiants.add(id);
+      comptes[p.type] = (comptes[p.type] || 0) + 1;
+      garder(id, () => {
+        const [icone, label] = LIEUX_CARTE[p.type], categorie = t(label);
+        const contenu = p.nom ? `<b>${esc(p.nom)}</b><br>${esc(categorie)}` : `<b>${esc(categorie)}</b>`;
+        return marqueur([p.lat, lon], 'plan-pt plan-lieu plan-lieu-' + p.type, icone)
+          .setPopup(popupPlan(14).setHTML(contenu));
+      });
+    }
     let n = 0;
     for (const p of POINTS) {
       if (!b.contains([p[3], p[2]])) continue;
@@ -937,10 +989,12 @@ function majPointsPlan() {
       if (++n === 300) break;
     }
   }
+  if (!afficherLieux) { cleLieuxVue = ''; lieuxVue = []; }
   for (const [point, repere] of ptsMk) {
     if (!gardes.has(point)) { repere.remove(); ptsMk.delete(point); }
   }
 }
+addEventListener('online', () => { cleLieuxVue = ''; majPointsPlan(); });
 
 // ---------- Carte hors ligne : télécharger la zone affichée ----------
 // ponytail: tout jusqu'au zoom 14 (au-delà MapLibre agrandit les tuiles vectorielles), relief jusqu'au zoom 12 (maxzoom de la source) ; plafond 8 000 morceaux
@@ -1132,12 +1186,19 @@ function choisirDest(ll, nom) {
 }
 
 const SENS = { left: 'à gauche', right: 'à droite', 'slight left': 'légèrement à gauche', 'slight right': 'légèrement à droite', 'sharp left': 'franchement à gauche', 'sharp right': 'franchement à droite', straight: 'tout droit', uturn: 'demi-tour' };
+function directionManoeuvre(m) {
+  if (['roundabout', 'rotary', 'roundabout turn'].includes(m.type)) return 'rond-point';
+  if (['depart', 'arrive', 'continue', 'new name'].includes(m.type)) return null;
+  if (m.modifier?.endsWith('right')) return 'droite';
+  if (m.modifier?.endsWith('left')) return 'gauche';
+  return null;
+}
 function consigne(s) {
   const m = s.maneuver, sens = SENS[m.modifier] ? t(SENS[m.modifier]) : '', r = s.name ? t(' sur {n}', { n: s.name }) : '';
   const n = m.exit || 1, e = LANGUE === 'en' ? n + ([, 'st', 'nd', 'rd'][n] || 'th') : LANGUE === 'es' ? n + 'ª' : n === 1 ? '1ʳᵉ' : n + 'ᵉ';
   if (m.type === 'depart') return t('Pars{r}', { r });
   if (m.type === 'arrive') return t('Tu es arrivé');
-  if (m.type === 'roundabout' || m.type === 'rotary') return t('Au rond-point, prends la {e} sortie{r}', { e, r });
+  if (directionManoeuvre(m) === 'rond-point') return t('Au rond-point, prends la {e} sortie{r}', { e, r });
   if (m.type === 'fork') return t('À la fourche, prends {s}{r}', { s: sens, r });
   if (m.modifier === 'uturn') return t('Fais demi-tour{r}', { r });
   if (m.modifier === 'straight' || !sens) return t('Continue tout droit{r}', { r });
@@ -1220,7 +1281,7 @@ async function itiHorsLigne(dep, arr, mode) {
   }
   virages.push(mk(chemin.length - 1, 'arrive'));
   const cum = [0]; for (let i = 1; i < geo.length; i++) cum.push(cum[i - 1] + distance(geo[i - 1], geo[i]));
-  virages.forEach((v, k) => etapes.push([consigne(v.s), Math.round((virages[k + 1] ? cum[virages[k + 1].i] : cum[v.i]) - cum[v.i]), geo[v.i]]));
+  virages.forEach((v, k) => etapes.push([consigne(v.s), Math.round((virages[k + 1] ? cum[virages[k + 1].i] : cum[v.i]) - cum[v.i]), geo[v.i], directionManoeuvre(v.s.maneuver)]));
   // Le tracé part de ma position et finit à l'arrivée (sinon « Tu t'écartes » dès le départ si la route la plus proche est à 100 m)
   const r5 = ll => ll.map(x => +x.toFixed(5)), vol = (vit.minor || 40) / 3.6;
   return { d: d + d0 + d1, t: g.get(n1) + (d0 + d1) / Math.min(vol, 5), via: t('carte téléchargée, sans réseau'), geo: [r5(dep), ...geo, r5(arr)], etapes, horsLigne: true };
@@ -1271,7 +1332,7 @@ async function calculerIti() {
       d: rt.distance, t: rt.duration, via: [...new Set(rt.legs.flatMap(l => l.summary.split(', ')).filter(Boolean))].slice(0, 2).join(', '),
       geo: rt.geometry.coordinates.map(([lo, la]) => [+la.toFixed(5), +lo.toFixed(5)]),
       etapes: rt.legs.flatMap((l, k) => l.steps.filter(s => !(s.maneuver.type === 'arrive' && k < rt.legs.length - 1) && !(s.maneuver.type === 'depart' && k > 0)))
-        .map(s => [consigne(s), Math.round(s.distance), [+s.maneuver.location[1].toFixed(5), +s.maneuver.location[0].toFixed(5)]]),
+        .map(s => [consigne(s), Math.round(s.distance), [+s.maneuver.location[1].toFixed(5), +s.maneuver.location[0].toFixed(5)], directionManoeuvre(s.maneuver)]),
     });
     const alts = [enAlt(r0)];
     $('#itiGo').disabled = false;
@@ -1319,9 +1380,10 @@ function cadrerRoute(R) {
   (R.alts || [R]).forEach(a => a.geo.forEach(p => cadre.extend(lnglat(p))));
   const choix = $('#itiChoix'), lateral = cartePaysage.matches && $('.plan-wrap').classList.contains('plein') && !choix.hidden;
   const haut = $('.plan-haut').offsetHeight + 28;
-  const bas = lateral ? $('.plan-btns').offsetHeight + 44 : $('.plan-bas').offsetHeight + 17;
-  const droite = lateral ? Math.min(choix.offsetWidth + 30, largeur * .6) : 24;
-  plan.fitBounds(cadre, { padding: { top: Math.min(haut, hauteur * .3), bottom: Math.min(bas, hauteur * .6), left: 24, right: droite }, duration: 0 });
+  const bas = $('#itiHoraires').offsetHeight + (lateral ? 0 : choix.offsetHeight) + 42;
+  const gauche = lateral ? Math.min(choix.offsetWidth + 22, largeur * .55) : 24;
+  const droite = Math.min($('.plan-btns').offsetWidth + 20, largeur * .23);
+  plan.fitBounds(cadre, { padding: { top: Math.min(haut, hauteur * .28), bottom: Math.min(bas, hauteur * .62), left: gauche, right: droite }, duration: 0 });
 }
 // Bulles de durée posées sur chaque itinéraire, à l'endroit où il s'écarte le plus de l'autre
 let bulles = [];

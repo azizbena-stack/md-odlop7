@@ -387,22 +387,39 @@ html.carte-plein-ecran, html.carte-plein-ecran body { overflow: hidden; overscro
 .plan-haut { position: absolute; inset: 10px 10px auto; z-index: 501; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; pointer-events: none; }
 .plan-haut-actions { display: flex; gap: 6px; grid-column: 2; justify-self: end; }
 .plan-haut > * { pointer-events: auto; }
-.plan-calcul, .iti-horaires { grid-column: 1; justify-self: start; margin: 0; padding: 8px 10px; border-radius: 12px; color: var(--txt); background: var(--surface); box-shadow: var(--ombre); }
-.plan-calcul { font-size: 13px; grid-column: 1 / -1; overflow-wrap: anywhere; }
-.iti-horaires { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.iti-horaires dt { font-size: 12px; color: var(--txt2); }
-.iti-horaires dd { margin: 0; font-size: 15px; font-weight: 700; }
+.plan-calcul, .iti-horaires { margin: 0; padding: 8px 10px; border-radius: 12px; color: var(--txt); background: var(--surface); box-shadow: var(--ombre); }
+.plan-calcul { font-size: 13px; grid-column: 1 / -1; justify-self: start; overflow-wrap: anywhere; }
+.iti-horaires {
+  grid-column: 1 / -1; grid-row: 3; justify-self: center;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px 22px; padding: 10px 16px;
+  max-width: 100%; border-radius: 16px;
+}
+.iti-horaires dt { font-size: 13px; color: var(--txt2); }
+.iti-horaires dd { margin: 0; font-size: clamp(20px, 5vw, 30px); font-weight: 750; line-height: 1.12; }
 .plan-wrap.plein .plan-haut { top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); right: calc(10px + env(safe-area-inset-right)); }
-.plan-btns { display: grid; gap: 8px; }
-/* Boutons et choix d'itinéraire en bas de la carte (au-dessus des crédits) */
-.plan-bas { position: absolute; left: 0; right: 0; bottom: 0; z-index: 500; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; padding: 10px 10px 30px; pointer-events: none; }
+.plan-btns {
+  grid-column: 2; grid-row: 1; display: grid; gap: 7px; max-height: 100%;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+}
+/* Commandes à droite, choix d'itinéraire et horaires au-dessus des crédits */
+.plan-bas {
+  position: absolute; inset: 64px 0 0; z-index: 500; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr) auto auto;
+  align-items: end; gap: 8px; padding: 0 10px 30px; pointer-events: none;
+}
 .plan-bas > * { pointer-events: auto; }
-.plan-wrap.plein .plan-bas { max-height: calc(100% - 96px - env(safe-area-inset-top)); padding: 10px calc(10px + env(safe-area-inset-right)) calc(30px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left)); }
-.plan-wrap.plein .plan-btns { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.plan-wrap.plein .plan-bas {
+  top: calc(64px + env(safe-area-inset-top));
+  padding: 0 calc(10px + env(safe-area-inset-right)) calc(30px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left));
+}
+.plan-wrap.plein:has(#navBandeau:not([hidden])) .plan-bas { top: calc(105px + env(safe-area-inset-top)); }
+#itiChoix { grid-column: 1 / -1; grid-row: 2; max-height: min(38dvh, 250px); }
 @media (orientation: landscape) and (max-height: 500px) {
-  .plan-wrap.plein .plan-bas { flex-direction: row; align-items: flex-end; }
-  .plan-wrap.plein .plan-btns { flex: 0 1 auto; justify-content: flex-start; }
-  .plan-wrap.plein .iti-choix { align-self: auto; flex: none; width: min(53%, 365px); max-height: calc(100dvh - 103px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); margin-inline-start: auto; }
+  .plan-wrap.plein .plan-btns { grid-template-columns: repeat(2, auto); }
+  .plan-wrap.plein:has(.leaflet-container) .plan-btns { grid-template-columns: auto; }
+  .plan-wrap.plein #itiChoix {
+    grid-column: 1; grid-row: 1; align-self: end; justify-self: start; width: min(100%, 380px); max-height: 100%;
+  }
 }
 .plan-wrap.plein .maplibregl-ctrl-bottom-right { right: env(safe-area-inset-right); bottom: env(safe-area-inset-bottom); }
 .iti-choix { display: flex; flex-direction: column; min-height: 0; align-self: stretch; background: #fff; color: #1C1C1E; border-radius: 22px; padding: 12px; box-shadow: 0 -4px 24px rgba(0, 0, 0, .22); }
@@ -510,6 +527,15 @@ html.carte-plein-ecran, html.carte-plein-ecran body { overflow: hidden; overscro
 .nav-bandeau { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px;
   background: #1F7A4D; color: #fff; border-radius: 16px; padding: 12px 12px 12px 16px; box-shadow: 0 6px 18px rgba(0, 0, 0, .3); }
 .nav-bandeau > div { flex: 1; min-width: 0; }
+.nav-virage {
+  grid-column: 1; justify-self: start; display: flex; align-items: center; gap: 10px;
+  max-width: 350px; padding: 8px 12px; border-radius: 14px; background: #173C78; color: #fff;
+  box-shadow: 0 5px 14px #0A163D55; pointer-events: none;
+}
+.nav-virage .ic { width: 32px; height: 32px; }
+.nav-virage[data-direction="gauche"] .ic { transform: scaleX(-1); }
+.nav-virage b { display: block; font-size: 21px; line-height: 1.15; }
+.nav-virage span { display: block; font-size: 13px; line-height: 1.2; }
 .nav-bandeau b { display: block; font-size: 18px; line-height: 1.2; }
 .nav-bandeau small { display: block; font-size: 14px; opacity: .85; margin-top: 2px; }
 .nav-bandeau button { border: 0; background: rgba(255, 255, 255, .2); color: #fff; width: 36px; height: 36px; border-radius: 50%; font-size: 16px; cursor: pointer; flex: none; padding: 0; display: grid; place-items: center; line-height: 1; }
@@ -555,6 +581,12 @@ dialog { position: fixed; }
 .c-hopital { color: #FF2D55; } .c-danger { color: var(--danger); } .c-port { color: var(--accent); } .c-village { color: var(--txt2); }
 .plan-pt { display: grid; place-items: center; background: #fff; border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
 .plan-pt .ic { width: 16px; height: 16px; }
+.plan-lieu { width: 28px; height: 28px; }
+.c-hotel { color: #6343B2; }
+.c-restaurant { color: #A33B23; }
+.c-camping { color: #176B47; }
+.c-parking { color: #165CB2; }
+.c-aeroport { color: #245477; }
 .plan-danger .ic { color: #fff; }
 .grille-danger .tuile b { color: var(--danger); }
 .grille-danger .tuile .ic { width: 28px; height: 28px; }
