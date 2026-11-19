@@ -408,7 +408,8 @@ html.carte-plein-ecran, html.carte-plein-ecran body { overflow: hidden; overscro
 .plan-btn { border: 0; min-width: 44px; height: 44px; padding: 0 12px; border-radius: 14px; font-weight: 600; font-size: 14px; color: var(--accent); cursor: pointer;
   background: var(--barre); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 4px 14px rgba(0, 0, 0, .15); display: grid; place-items: center; }
 .plan-btn svg { width: 22px; height: 22px; }
-.plan-btn.on { background: var(--accent); color: #fff; }
+.plan-wrap.plein .plan-btn { background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.plan-wrap.plein .plan-btn.on, .plan-btn.on { background: var(--accent); color: #fff; }
 .wiki h3 { font-size: 17px; margin: 18px 0 6px; }
 .wiki p { margin: 0 0 10px; line-height: 1.5; }
 .maplibregl-map { font-family: var(--font); }

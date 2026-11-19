@@ -29,14 +29,20 @@ function traduire(racine) {
   if (racine.nodeType === 3) { const k = cleT(racine.data); if (D[k] && D[k] !== k) racine.data = racine.data.replace(racine.data.trim(), D[k]); return; }
   if (racine.nodeType !== 1 || racine.closest?.('script,style,.fiche-texte')) return;
   for (const el of [racine, ...racine.querySelectorAll('*')]) {
-    for (const a of ['placeholder', 'aria-label', 'title']) { const v = el.getAttribute?.(a); if (v && D[cleT(v)]) el.setAttribute(a, D[cleT(v)]); }
-    if (el.children.length && D[cleT(el.innerHTML)]) el.innerHTML = D[cleT(el.innerHTML)]; // phrase avec <b>, <a>…
+    for (const a of ['placeholder', 'aria-label', 'title']) {
+      const v = el.getAttribute?.(a), traduction = v && D[cleT(v)];
+      if (traduction && traduction !== v) el.setAttribute(a, traduction);
+    }
+    const html = el.children.length && el.innerHTML, traduction = html && D[cleT(html)];
+    if (traduction && traduction !== html) el.innerHTML = traduction; // phrase avec <b>, <a>…
   }
   const w = document.createTreeWalker(racine, NodeFilter.SHOW_TEXT); for (let n; (n = w.nextNode());) traduire(n);
 }
-traduire(document.body);
-new MutationObserver(ms => ms.forEach(m => m.type === 'characterData' ? traduire(m.target) : m.type === 'attributes' ? traduire(m.target) : m.addedNodes.forEach(traduire)))
-  .observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'aria-label', 'title'] });
+if (LANGUE !== 'fr') {
+  traduire(document.body);
+  new MutationObserver(ms => ms.forEach(m => m.type === 'childList' ? m.addedNodes.forEach(traduire) : traduire(m.target)))
+    .observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'aria-label', 'title'] });
+}
 
 // ---------- Hors ligne ----------
 if ('serviceWorker' in navigator) {
@@ -83,7 +89,7 @@ modal.addEventListener('close', stopMetro);
 // ---------- Données France ----------
 let COMMUNES = [], POINTS = [];
 Promise.all([fetch('data/communes.json').then(r => r.json()), fetch('data/points.json').then(r => r.json())])
-  .then(([c, p]) => { COMMUNES = c; POINTS = p; if (pos) majSituation(); });
+  .then(([c, p]) => { COMMUNES = c; POINTS = p; if (pos) majSituation(); majPointsPlan(); });
 
 // ---------- GPS ----------
 let pos = null, watchId = null, heading = null, villageHist = [];
@@ -524,8 +530,19 @@ const nomStyle = () => styleCarte()[0] === 'auto' ? (document.documentElement.da
 const urlStyle = () => `https://tiles.openfreemap.org/styles/${nomStyle()}`;
 const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const MODES = { foot: ['routed-foot', t('à pied')], bike: ['routed-bike', t('à vélo')], car: ['routed-car', t('en voiture')] };
-let plan = null, moiMk = null, destMk = null, ptsMk = [], suivre = true, en3D = false;
-let destination = S.route?.dest || null, modeIti = S.route?.mode || 'car'; // voiture par défaut, comme un GPS
+let plan = null, moiMk = null, destMk = null, suivre = true, en3D = false, carteManipulee = false;
+const ptsMk = new Map();
+const modeParDefaut = profil => profil === 'velo' ? 'bike' : 'car';
+let destination = S.route?.dest || null, modeIti = S.route?.mode || modeParDefaut(S.profil);
+const carteVisible = () => $('#v-carte').classList.contains('active');
+let largeurPlan = 0, hauteurPlan = 0;
+function redimensionnerPlan() {
+  if (!plan || !carteVisible()) return;
+  const { clientWidth, clientHeight } = plan.getContainer();
+  if (!clientWidth || !clientHeight || (largeurPlan === clientWidth && hauteurPlan === clientHeight)) return;
+  largeurPlan = clientWidth; hauteurPlan = clientHeight;
+  plan.resize();
+}
 const lnglat = ([la, lo]) => [lo, la];
 const traceGeoJSON = () => ({ type: 'FeatureCollection', features: S.traceCarte && S.trace.length > 1
   ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: S.trace.map(lnglat) } }] : [] });
@@ -575,10 +592,12 @@ function marqueur(ll, cls, html = '', anchor = 'center') {
 const marqueurDest = ll => marqueur(ll, 'plan-cible', '<div class="plan-dest-arrivee"></div>');
 
 function initPlan() {
+  if (!carteVisible()) return;
   if (!window.maplibregl) return $('#itiRes').textContent = 'La carte n\'a pas pu se charger.';
-  if (plan) return plan.resize();
+  if (plan) { redimensionnerPlan(); majMoiPlan(); majPointsPlan(); return; }
   try {
     plan = new maplibregl.Map({ container: 'plan', style: urlStyle(), center: pos ? lnglat(ici()) : [2.4, 46.6], zoom: pos ? 14 : 5, maxPitch: 60, attributionControl: { compact: true },
+      trackResize: !window.ResizeObserver,
       // Carte dans la page : un doigt fait défiler la page, deux doigts bougent la carte (en plein écran : un doigt suffit)
       cooperativeGestures: !$('.plan-wrap').classList.contains('plein'), locale: { 'CooperativeGesturesHandler.MobileHelpText': 'Deux doigts pour bouger la carte · un doigt pour faire défiler', 'CooperativeGesturesHandler.WindowsHelpText': 'Ctrl + molette pour zoomer', 'CooperativeGesturesHandler.MacHelpText': '⌘ + molette pour zoomer' } }); // 60° au plus : au-delà on voit le ciel en haut de l’écran (Aziz veut la carte sur tout l’écran)
   } catch {
@@ -637,13 +656,16 @@ function initPlan() {
     const ll = [e.lngLat.lat, e.lngLat.lng], [v] = COMMUNES.length ? nearest(COMMUNES, ll) : [];
     choisirDest(ll, v ? t('Près de {v}', { v: `${v.p[0]} (${v.p[4]})` }) : t('Point sur la carte'));
   });
-  plan.on('dragstart', () => { suivre = false; });
-  plan.on('moveend', majPointsPlan);
+  plan.on('movestart', e => {
+    if (e.originalEvent) { suivre = false; carteManipulee = true; }
+  });
+  plan.on('moveend', programmerPointsPlan);
   plan.on('resize', () => {
     if (!$('.plan-wrap').classList.contains('plein')) return;
     if (guidage && suivre) plan.setPadding(margeGuidage());
-    else if (S.route && !$('#itiChoix').hidden) cadrerRoute(S.route);
+    else if (S.route && !carteManipulee && !$('#itiChoix').hidden) cadrerRoute(S.route);
   });
+  if (window.ResizeObserver) new ResizeObserver(redimensionnerPlan).observe(plan.getContainer());
   majMoiPlan(); majPointsPlan(); majModes(); majRelief(); majZones();
 }
 $('#btnStyle').textContent = t(styleCarte()[1]);
@@ -660,9 +682,9 @@ function pleinEcranCarte(actif) {
   bouton.textContent = actif ? '✕' : '⤢';
   bouton.setAttribute('aria-label', t(actif ? 'Quitter le plein écran' : 'Carte en plein écran'));
   bouton.setAttribute('aria-pressed', actif);
-  plan?.resize();
   if (actif) plan?.cooperativeGestures.disable();
   else plan?.cooperativeGestures.enable();
+  redimensionnerPlan();
 }
 $('#btnPlein').onclick = () => {
   if (guidage) return;
@@ -671,9 +693,9 @@ $('#btnPlein').onclick = () => {
   pleinEcranCarte(actif);
 };
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !document.querySelector('dialog[open]') && !guidage && $('.plan-wrap').classList.contains('plein')) {
-    $('#btnPlein').click();
-  }
+  if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('dialog[open]') || !$('.plan-wrap').classList.contains('plein')) return;
+  if (guidage) arreterGuidage();
+  else $('#btnPlein').click();
 });
 $('#planSuite').onclick = () => $('#planSuite').nextElementSibling.scrollIntoView({ behavior: 'smooth', block: 'start' });
 // 2D = vue du dessus (à vol d'oiseau) ; 3D = carte inclinée avec le relief en volume et les bâtiments
@@ -697,8 +719,13 @@ $('#btnCentrer').onclick = () => { suivre = true; if (!pos) return demarrerGps()
 function majMoiPlan() {
   if (!plan || !pos) return;
   if (guidage) return majGuidage();
-  if (!moiMk) moiMk = marqueur(ici(), 'plan-moi'); else moiMk.setLngLat(lnglat(ici()));
-  if (suivre && !S.route) plan.easeTo({ center: lnglat(ici()), zoom: Math.max(plan.getZoom(), 14) });
+  if (!carteVisible()) return;
+  const position = ici();
+  if (!moiMk) moiMk = marqueur(position, 'plan-moi'); else moiMk.setLngLat(lnglat(position));
+  if (suivre && !S.route) {
+    const { lng, lat } = plan.getCenter(), zoom = plan.getZoom();
+    if (zoom < 14 || distance([lat, lng], position) > 2) plan.easeTo({ center: lnglat(position), zoom: Math.max(zoom, 14) });
+  }
 }
 
 // ---------- Guidage façon GPS de voiture ----------
@@ -791,7 +818,7 @@ function majGuidage() {
   // En roulant, le cap du GPS est plus fiable ; à pied ou à l'arrêt, la direction de la route
   const v = pos.coords.speed, cap = v > 2 && pos.coords.heading != null && !isNaN(pos.coords.heading) ? pos.coords.heading : capRoute;
   // Sur la route, la flèche est posée sur le tracé (comme un GPS de voiture) : elle ne tremble plus à côté
-  allerVers(dmin < 25 ? proj : me, cap);
+  if (carteVisible()) allerVers(dmin < 25 ? proj : me, cap);
   if (distance(me, R.dest.ll) < 30) { const a = t('Tu es arrivé : {n}.', { n: R.dest.nom }); dire(a, true); return arreterGuidage(a); }
   const total = cumul.at(-1), fin = Math.max(0, total - progression) + dmin;
   resteGuidage = total ? R.t * Math.min(1, Math.max(0, fin / total)) : R.t;
@@ -828,7 +855,7 @@ function allerVers(ll, cap) {
   if (!rafNav) rafNav = requestAnimationFrame(boucleNav);
 }
 function boucleNav(t) {
-  rafNav = 0; if (!guidage || !anim || !navMk) return;
+  rafNav = 0; if (!guidage || !anim || !navMk || !carteVisible()) return;
   const k = anim.dur ? Math.min(1, (t - anim.t0) / anim.dur) : 1, { de, vers } = anim;
   const dCap = ((vers.cap - de.cap + 540) % 360) - 180; // par le plus court
   affiche = { ll: [de.ll[0] + (vers.ll[0] - de.ll[0]) * k, de.ll[1] + (vers.ll[1] - de.ll[1]) * k], cap: (de.cap + dCap * k + 360) % 360 };
@@ -841,19 +868,47 @@ $('#navVoix').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (!S.voix
 $('#navDanger').onclick = () => signalerDanger();
 
 // Refuges, points d'eau, hôpitaux… et mes points, quand on zoome assez
+let minuteriePoints = 0;
+function programmerPointsPlan() {
+  if (minuteriePoints || !carteVisible()) return;
+  // La caméra du guidage émet « moveend » à chaque image.
+  minuteriePoints = setTimeout(() => {
+    minuteriePoints = 0;
+    majPointsPlan();
+  }, 200);
+}
 function majPointsPlan() {
-  if (!plan) return;
-  ptsMk.forEach(m => m.remove()); ptsMk = [];
-  const b = plan.getBounds();
-  if (S.pointsCarte !== false) S.points.forEach(p => ptsMk.push(marqueur([p.lat, p.lon], 'plan-mien').setPopup(new maplibregl.Popup({ offset: 10 }).setText(p.nom))));
-  dangersActifs().forEach(d => ptsMk.push(marqueur([d.lat, d.lon], 'plan-pt plan-danger', SIGNALES[d.type][0]).setPopup(new maplibregl.Popup({ offset: 14 })
-    .setHTML(`<b>${SIGNALES[d.type][1]}</b><br>${t('Signalé {q} il y a {d}', { q: d.moi ? t('par toi') : d.par ? t('par {n}', { n: esc(d.par) }) : t('par ton groupe'), d: depuis(Date.now() - d.t) })}<br><button class="btn petit" data-suppr-danger="${esc(d.id)}">Plus là : retirer</button>`))));
-  if (plan.getZoom() < 11 || S.lieuxCarte === false) return;
-  POINTS.filter(p => b.contains([p[3], p[2]])).slice(0, 300).forEach(p => {
-    const [ico, lib] = TYPES[p[0]] || ['•', p[0]];
-    ptsMk.push(marqueur([p[2], p[3]], 'plan-pt', ico)
-      .setPopup(new maplibregl.Popup({ offset: 14 }).setHTML(`<b>${esc(p[1])}</b><br>${lib}${p[4] ? ' · ' + p[4] + ' m' : ''}`)));
+  if (!plan || !carteVisible()) return;
+  const gardes = new Set();
+  const garder = (point, creer) => {
+    gardes.add(point);
+    if (!ptsMk.has(point)) ptsMk.set(point, creer());
+  };
+  if (S.pointsCarte !== false) {
+    for (const p of S.points) garder(p, () => marqueur([p.lat, p.lon], 'plan-mien')
+      .setPopup(new maplibregl.Popup({ offset: 10 }).setText(p.nom)));
+  }
+  for (const d of dangersActifs()) garder(d, () => {
+    const popup = new maplibregl.Popup({ offset: 14 });
+    popup.on('open', () => popup.setHTML(`<b>${SIGNALES[d.type][1]}</b><br>${t('Signalé {q} il y a {d}', { q: d.moi ? t('par toi') : d.par ? t('par {n}', { n: esc(d.par) }) : t('par ton groupe'), d: depuis(Date.now() - d.t) })}<br><button class="btn petit" data-suppr-danger="${esc(d.id)}">Plus là : retirer</button>`));
+    return marqueur([d.lat, d.lon], 'plan-pt plan-danger', SIGNALES[d.type][0]).setPopup(popup.setText(SIGNALES[d.type][1]));
   });
+  if (plan.getZoom() >= 11 && S.lieuxCarte !== false) {
+    const b = plan.getBounds();
+    let n = 0;
+    for (const p of POINTS) {
+      if (!b.contains([p[3], p[2]])) continue;
+      garder(p, () => {
+        const [ico, lib] = TYPES[p[0]] || ['•', p[0]];
+        const popup = new maplibregl.Popup({ offset: 14 }).setHTML(`<b>${esc(p[1])}</b><br>${lib}${p[4] ? ' · ' + p[4] + ' m' : ''}`);
+        return marqueur([p[2], p[3]], 'plan-pt', ico).setPopup(popup);
+      });
+      if (++n === 300) break;
+    }
+  }
+  for (const [point, repere] of ptsMk) {
+    if (!gardes.has(point)) { repere.remove(); ptsMk.delete(point); }
+  }
 }
 
 // ---------- Carte hors ligne : télécharger la zone affichée ----------
@@ -1150,6 +1205,8 @@ async function calculerIti() {
   const id = ++calcId, dest = destination, mode = modeIti;
   const dep = pos ? ici() : plan ? [plan.getCenter().lat, plan.getCenter().lng] : null;
   if (!dep) return $('#itiRes').textContent = 'Position inconnue : active le GPS.';
+  carteManipulee = false;
+  $('#itiGo').disabled = true;
   $('#itiRes').textContent = t('Calcul de l\'itinéraire {m} vers {d}…', { m: MODES[mode][1], d: dest.nom });
   afficherCalculCarte($('#itiRes').textContent);
   $('#btnItiBoussole').hidden = false;
@@ -1159,7 +1216,8 @@ async function calculerIti() {
     afficherCalculCarte($('#itiRes').textContent);
     try {
       const a = await itiHorsLigne(dep, dest.ll, mode); if (id !== calcId) return true;
-      S.route = { dest, mode, alts: [a], choix: 0, ...a }; noterTrajet(S.route); afficherCalculCarte(''); proposerItis(); dessinerRoute(S.route, true); return true;
+      $('#itiGo').disabled = false;
+      S.route = { dest, mode, alts: [a], choix: 0, ...a }; noterTrajet(S.route); afficherCalculCarte(''); proposerItis(); dessinerRoute(S.route, !carteManipulee); return true;
     } catch (e) { if (id === calcId) console.warn('itinéraire hors ligne', e); return false; }
   };
   if (!navigator.onLine && await sansReseau()) return;
@@ -1182,8 +1240,9 @@ async function calculerIti() {
         .map(s => [consigne(s), Math.round(s.distance), [+s.maneuver.location[1].toFixed(5), +s.maneuver.location[0].toFixed(5)]]),
     });
     const alts = [enAlt(r0)];
+    $('#itiGo').disabled = false;
     S.route = { dest, mode, alts, choix: 0, ...alts[0] };
-    noterTrajet(S.route); afficherCalculCarte(''); proposerItis(); dessinerRoute(S.route, true);
+    noterTrajet(S.route); afficherCalculCarte(''); proposerItis(); dessinerRoute(S.route, !carteManipulee);
     // Variantes à gauche / à droite, sans faire attendre le trajet principal
     const rv = await Promise.all([1, -1].map(k => lire([dep, cote(k), dest.ll]).catch(() => null)));
     if (id !== calcId || guidage || S.route?.alts !== alts) return;
@@ -1193,11 +1252,12 @@ async function calculerIti() {
     if (alts.length < 2) return;
     const choixVisible = !$('#itiChoix').hidden;
     if (choixVisible) proposerItis();
-    save(); dessinerRoute(S.route, choixVisible && S.route.choix === 0);
+    save(); dessinerRoute(S.route, choixVisible && !carteManipulee && S.route.choix === 0);
   } catch (e) {
     if (id !== calcId) return;
     if (navigator.onLine && e.name !== 'AbortError' && await sansReseau()) return; // réseau trop faible : on tente la carte gardée
     if (id !== calcId) return;
+    $('#itiGo').disabled = false;
     const d = distance(dep, dest.ll), raison = e.name === 'TimeoutError' ? 'le serveur ne répond pas, retouche « Y aller »' : e.message;
     afficherCalculCarte(navigator.onLine ? t('Itinéraire impossible ({r}).', { r: t(raison) }) : t('Trajet non couvert par la carte téléchargée.'));
     $('#itiRes').innerHTML = (navigator.onLine ? t('Itinéraire impossible ({r}).', { r: esc(t(raison)) }) : t('Pas de réseau, et la carte téléchargée ne couvre pas ce trajet (télécharge la zone dans l\'onglet Carte).'))
@@ -1690,7 +1750,7 @@ $('#btnIA').onclick = () => {
 
 function contexteSituation() {
   const c = [];
-  const p = { rando: 'randonneur', alpi: 'alpiniste', voyage: 'voyageur', survie: 'en situation de survie', mer: 'marin, en mer' }[S.profil] || 'randonneur';
+  const p = { rando: 'randonneur', velo: 'cycliste', alpi: 'alpiniste', voyage: 'voyageur', survie: 'en situation de survie', mer: 'marin, en mer' }[S.profil] || 'randonneur';
   c.push(`Utilisateur : ${p}.`);
   if (pos) c.push(`Position : ${ici()[0].toFixed(4)}, ${ici()[1].toFixed(4)}${pos.coords.altitude != null ? ', altitude ' + Math.round(pos.coords.altitude) + ' m' : ''}.`);
   if (dernierVillage) c.push(`Lieu habité le plus proche : ${dernierVillage.p[0]} à ${fmtDist(dernierVillage.d)} direction ${cardinal(dernierVillage.cap)}.`);
@@ -1808,24 +1868,37 @@ $('#btnBivouac').onclick = () => {
 $('#btnPerdu').onclick = () => ouvrirFiche('perdu');
 
 // ---------- Moi : profil, fiche, contacts, plan, sac ----------
-const PROFILS = { rando: 'Randonneur', alpi: 'Alpiniste', mer: 'Marin', voyage: 'Voyageur', survie: 'Survie' };
+const PROFILS = { rando: 'Randonneur', alpi: 'Alpiniste', mer: 'Marin', voyage: 'Voyageur', survie: 'Survie', velo: 'Cycliste' };
 const SACS = {
   base: ['Eau 2 L', 'Couverture de survie', 'Sifflet', 'Lampe frontale', 'Batterie externe', 'Trousse de secours', 'Couteau', 'Briquet', 'Coupe-vent', 'Couche chaude', 'En-cas', 'Carte papier'],
   alpi: ['DVA, pelle, sonde', 'Casque', 'Crampons', 'Lunettes catégorie 4', 'Crème solaire'],
   voyage: ['Copie du passeport', 'Carte bancaire de secours', 'Adaptateur prise', 'Médicaments habituels'],
   survie: ['Pastilles de purification', 'Bâche', 'Corde 10 m', 'Hameçons et fil', 'Allume-feu'],
   rando: ['Bâtons', 'Chapeau', 'Pansements ampoules'],
+  velo: ['Casque de vélo', 'Pompe et kit de réparation', 'Éclairage avant et arrière'],
   mer: ['Gilet de sauvetage', 'VHF portable étanche', 'Balise de détresse (PLB)', 'Feux à main et fumigène', 'Sac étanche', 'Lampe étanche', 'Compas de relèvement', 'Carte marine papier'],
 };
+const sacCoche = i => S.sac.includes(i) || S.sac.includes(t(i));
 function majProfil() {
-  $('#profils').innerHTML = Object.entries(PROFILS).map(([k, v]) => `<button class="chip ${S.profil === k ? 'on' : ''}" data-p="${k}">${v}</button>`).join('');
+  $('#profils').innerHTML = Object.entries(PROFILS).map(([k, v]) => `<button class="chip ${S.profil === k ? 'on' : ''}" data-p="${k}" aria-pressed="${S.profil === k}">${t(v)}</button>`).join('');
   const items = [...SACS.base, ...(SACS[S.profil] || [])];
-  $('#sac').innerHTML = items.map(i => `<li class="${S.sac.includes(i) ? 'ok' : ''}">${i}</li>`).join('');
-  $('#sacScore').textContent = `${items.filter(i => S.sac.includes(i)).length} / ${items.length}`;
+  $('#sac').innerHTML = items.map(i => `<li data-sac="${esc(i)}" class="${sacCoche(i) ? 'ok' : ''}">${esc(t(i))}</li>`).join('');
+  $('#sacScore').textContent = `${items.filter(sacCoche).length} / ${items.length}`;
   $('#merCarte').hidden = $('#sosMer').hidden = S.profil !== 'mer'; // Homme à la mer : seulement avec le profil Marin
 }
-$('#profils').onclick = e => { const b = e.target.closest('[data-p]'); if (!b) return; S.profil = b.dataset.p; save(); majProfil(); if (pos) { majSituation(); majMer(); } };
-$('#sac').onclick = e => { const li = e.target.closest('li'); if (!li) return; const i = li.textContent; S.sac = S.sac.includes(i) ? S.sac.filter(x => x !== i) : [...S.sac, i]; save(); majProfil(); };
+$('#profils').onclick = e => {
+  const profil = e.target.closest('[data-p]')?.dataset.p;
+  if (!profil || profil === S.profil) return;
+  if (modeIti === modeParDefaut(S.profil)) { modeIti = modeParDefaut(profil); majModes(); }
+  S.profil = profil; save(); majProfil();
+  if (pos) { majSituation(); majMer(); }
+};
+$('#sac').onclick = e => {
+  const i = e.target.closest('[data-sac]')?.dataset.sac;
+  if (!i) return;
+  S.sac = sacCoche(i) ? S.sac.filter(x => x !== i && x !== t(i)) : [...S.sac, i];
+  save(); majProfil();
+};
 majProfil();
 
 $$('[data-fiche]').forEach(inp => { if (inp.tagName !== 'INPUT') return; inp.value = S.fiche[inp.dataset.fiche] || ''; inp.oninput = () => { S.fiche[inp.dataset.fiche] = inp.value; save(); }; });

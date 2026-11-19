@@ -267,6 +267,10 @@ const T = {
   "Données : communes © État français (geo.api.gouv.fr) · refuges et points d'eau © refuges.info (CC BY-SA) · hôpitaux © contributeurs OpenStreetMap (ODbL) · T’es où ? ne remplace pas les secours ni une formation.": ["Data: French municipalities © French State (geo.api.gouv.fr) · huts and water points © refuges.info (CC BY-SA) · hospitals © OpenStreetMap contributors (ODbL) · places worldwide © Photon / OpenStreetMap · T’es où ? does not replace emergency services or training.", "Datos: municipios franceses © Estado francés (geo.api.gouv.fr) · refugios y puntos de agua © refuges.info (CC BY-SA) · hospitales © colaboradores de OpenStreetMap (ODbL) · lugares del mundo © Photon / OpenStreetMap · T’es où ? no sustituye a los servicios de emergencia ni a una formación."],
   "Mentions légales · conditions · confidentialité · licences": ["Legal notice · terms · privacy · licences (in French)", "Aviso legal · condiciones · privacidad · licencias (en francés)"],
   // Bivouac, sac
+  "Cycliste": ["Cyclist", "Ciclista"],
+  "Casque de vélo": ["Bike helmet", "Casco de ciclismo"],
+  "Pompe et kit de réparation": ["Pump and repair kit", "Bomba y kit de reparación"],
+  "Éclairage avant et arrière": ["Front and rear lights", "Luces delantera y trasera"],
   "Dans un lit de rivière, un ravin ou près d'un ruisseau à sec": ["In a riverbed, a gully or near a dry stream", "En el cauce de un río, un barranco o junto a un arroyo seco"],
   "Sous des arbres ou branches mortes": ["Under trees or dead branches", "Bajo árboles o ramas muertas"], "Au pied d'une falaise ou d'un éboulis": ["At the foot of a cliff or scree", "Al pie de un acantilado o pedrera"],
   "Sur ou sous une pente enneigée": ["On or below a snowy slope", "En o bajo una ladera nevada"], "Sur une crête ou un sommet exposé": ["On an exposed ridge or summit", "En una cresta o cima expuesta"],

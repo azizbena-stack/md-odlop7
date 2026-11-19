@@ -13,16 +13,27 @@ export function bearing(a, b) { // degrés depuis le nord
   return (Math.atan2(y, x) / rad + 360) % 360;
 }
 
-// ponytail: scan linéaire (~35 000 points, quelques ms) ; grille spatiale si ça rame sur vieux téléphones
 export function nearest(list, here, k = 1, getLL = p => [p[1], p[2]]) {
   const kx = Math.cos(here[0] * rad);
-  const scored = [];
-  for (const p of list) {
+  const score = p => {
     const ll = getLL(p), dx = (ll[1] - here[1]) * kx, dy = ll[0] - here[0];
-    scored.push([dx * dx + dy * dy, p]);
+    return dx * dx + dy * dy;
+  };
+  const resultat = p => {
+    const ll = getLL(p);
+    return { p, d: distance(here, ll), cap: bearing(here, ll) };
+  };
+  if (k === 1) {
+    let proche, meilleur = Infinity;
+    for (const p of list) {
+      const s = score(p);
+      if (s < meilleur) { proche = p; meilleur = s; }
+    }
+    return proche === undefined ? [] : [resultat(proche)];
   }
-  scored.sort((x, y) => x[0] - y[0]);
-  return scored.slice(0, k).map(([, p]) => ({ p, d: distance(here, getLL(p)), cap: bearing(here, getLL(p)) }));
+  const scores = [];
+  for (const p of list) scores.push([score(p), p]);
+  return scores.sort((a, b) => a[0] - b[0]).slice(0, k).map(([, p]) => resultat(p));
 }
 
 export const CARDINAUX = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
