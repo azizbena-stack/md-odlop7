@@ -63,6 +63,7 @@ function ouvrir(vue) {
   $$('[data-seg]').forEach(b => b.classList.toggle('on', b.dataset.seg === vue));
   scrollTo({ top: 0 });
   if (vue === 'carte') setTimeout(initPlan); // la carte a besoin d'un conteneur visible
+  if (document.documentElement.classList.contains('survie')) coach();
 }
 $$('.tabs button').forEach(b => b.onclick = () => ouvrir(b.dataset.vue));
 $$('[data-seg]').forEach(b => b.onclick = () => ouvrir(b.dataset.seg));
@@ -1231,8 +1232,9 @@ majSmsProches();
 
 // ---------- Guide ----------
 let catSel = null;
-$('#cats').innerHTML = `<button class="chip on" data-cat="">Tout</button>` + Object.entries(CATS).map(([k, v]) => `<button class="chip" data-cat="${k}">${v}</button>`).join('')
-  + '<button class="chip" data-cat="wiki">Wikipédia</button>';
+const ICO_CAT = { urgence: 'sos', nuit: 'tente', eau: 'goutte', feu: 'flamme', manger: 'couverts', soins: 'croix', montagne: 'montagne', orient: 'comp', signal: 'drapeau', animaux: 'patte', potager: 'pousse', voyage: 'valise', mer: 'ancre', meteo: 'eclaircie' };
+$('#cats').innerHTML = `<button class="chip on" data-cat="">${pic('grille')} Tout</button>` + Object.entries(CATS).map(([k, v]) => `<button class="chip" data-cat="${k}">${pic(ICO_CAT[k] || 'book')} ${v}</button>`).join('')
+  + `<button class="chip" data-cat="wiki">${pic('globe')} Wikipédia</button>`;
 $('#cats').onclick = e => { const c = e.target.closest('.chip'); if (!c) return; catSel = c.dataset.cat || null; $$('#cats .chip').forEach(x => x.classList.toggle('on', x === c)); majFiches(); };
 const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const texte = f => norm(f.titre + ' ' + f.mots + ' ' + f.corps.replace(/<[^>]+>/g, ' '));
@@ -1381,13 +1383,14 @@ function contexteSituation() {
 }
 
 // Discussion : chaque question s'ajoute sous les précédentes, l'IA garde en tête les 2 derniers échanges
-let fil = Array.isArray(S.fil) ? S.fil : [];
+// Pas gardée : à chaque ouverture de l'app, le Guide repart sur « Demander » (demande d'Aziz)
+let fil = []; if (S.fil) { delete S.fil; save(); } // efface l'ancienne discussion gardée par les versions d'avant
 const bulleIA = (x, enCours) => `<div class="bulle ia">${enCours ? `<div id="iaTexte" class="meta">${x.attente}</div>` : x.r ? `<div class="txt">${esc(x.r)}</div>` : ''}${x.extra || ''}</div>`;
 function afficherFil(enCours) {
   $('#reponse').hidden = !fil.length; $('#filVider').hidden = !fil.length;
   $('#reponse').innerHTML = fil.map((x, i) => `<div class="bulle moi">${esc(x.q)}</div>${bulleIA(x, enCours && i === fil.length - 1)}`).join('');
 }
-const garderFil = () => { S.fil = fil.slice(-10).map(({ q, r, extra }) => ({ q, r, extra })); save(); };
+const garderFil = () => {}; // la discussion reste seulement tant que l'app est ouverte
 afficherFil();
 $('#filVider').onclick = () => { fil = []; garderFil(); afficherFil(); $('#question').focus(); };
 
@@ -1715,10 +1718,12 @@ const RADIOS = {
   }],
 };
 const STATIONS = Object.assign({}, ...Object.values(RADIOS).map(g => g[1]));
+// Icônes maison (pas les logos des radios, qui sont des marques)
+const ICO_RADIO = { franceinfo: 'info', franceinter: 'micro', rfi: 'globe', europe1: 'antenne', rtl: 'poste', rmc: 'ballon', bfm: 'courbe', sud: 'soleil', fip: 'note', franceculture: 'plume', mouv: 'casque', francemusique: 'notes' };
 const lecteur = new Audio();
 let radioOn = null;
 $('#radios').innerHTML = Object.values(RADIOS).map(([titre, st]) => `<div class="meta radio-groupe">${titre}</div>
-  <div class="chips">${Object.entries(st).map(([k, v]) => `<button class="chip" data-r="${k}">${v[0]}</button>`).join('')}</div>`).join('');
+  <div class="chips">${Object.entries(st).map(([k, v]) => `<button class="chip" data-r="${k}">${pic(ICO_RADIO[k] || 'poste')} ${v[0]}</button>`).join('')}</div>`).join('');
 function majRadio(t) {
   $$('#radios .chip').forEach(c => c.classList.toggle('on', c.dataset.r === radioOn));
   $('#radioEtat').textContent = t || (radioOn ? `● En direct · ~${STATIONS[radioOn][2]} Mo/h` : 'Par les données cellulaires');
@@ -1765,6 +1770,14 @@ function consignes() {
   // Alertes météo (orage, chute de pression, coup de vent) en premier : ce sont les plus urgentes
   const M = S.meteo, mi = M ? indexHeure(M) : -1;
   if (mi >= 0) for (const a of alertesMeteo(M, mi, 6)) c.push(['meteo' + a.slice(0, 3), a + t('. Mets-toi à l\'abri à temps.'), [['Orage et foudre', () => ouvrirFiche('orage')]]]);
+  // Sans alerte : la tendance de la pression (vraies prévisions téléchargées), au même endroit
+  if (mi >= 0 && !c.length) {
+    const p = M.h.pressure_msl, d3 = Math.round(p[Math.min(mi + 3, p.length - 1)] - p[mi]);
+    c.push(['meteo-tendance', d3 >= 1 ? t('↗ La pression va monter de {n} hPa en 3 h : le temps s\'améliore.', { n: d3 })
+      : d3 <= -1 ? t('↘ La pression va baisser de {n} hPa en 3 h : surveille le ciel.', { n: -d3 })
+      : t('→ La pression reste stable sur 3 h : pas de dégradation prévue.'), [['Orage et foudre', () => ouvrirFiche('orage')]]]);
+  }
+  if (mi < 0) c.push(['meteo-vide', t('Pas de météo récente : télécharge-la dès que tu as du réseau.'), [['Télécharger la météo', () => { ouvrir('situation'); $('#btnMeteo').click(); }]]]);
   if (!pos) c.push(['gps', 'Active ta position : sors à découvert et attends le signal GPS.', [['Activer le GPS', demarrerGps]]]);
   if (!S.points.length && pos) c.push(['camp', 'Marque ta position actuelle : tu pourras toujours y revenir.', [['Marquer ce point', () => $('#btnMarquer').click()]]]);
   if (batterie && !batterie.charging && batterie.level < .2) c.push(['bat', `Batterie à ${Math.round(batterie.level * 100)} %. Mode avion, luminosité au minimum, téléphone contre toi.`, []]);
@@ -1773,12 +1786,12 @@ function consignes() {
   if (now - derniereGorgee > 2 * 3600e3) c.push(['eau', 'Ça fait 2 heures. Bois quelques gorgées.', [['J\'ai bu', () => { derniereGorgee = Date.now(); refusConsignes.delete('eau'); coach(); }], ['Trouver de l\'eau', () => ouvrirFiche('eau-trouver')]]]);
   const tdn = $('#tendance');
   if (tdn.classList.contains('mal')) c.push(['loin', `Tu t'éloignes de ${dernierVillage?.p[0] || 'la civilisation'}. Arrête-toi et regarde la flèche.`, [['Je suis perdu', () => ouvrirFiche('perdu')]]]);
-  if (dernierVillage) c.push(['civi', `${dernierVillage.p[0]} est à ${fmtDist(dernierVillage.d)} vers le ${cardinal(dernierVillage.cap)}. Si quelqu'un sait où tu es, reste visible sur place.`, [['Signaux de détresse', () => ouvrirFiche('signaux')]]]);
   c.push(['stop', 'Respire. Fais le point : eau, nourriture, chaleur, blessures.', [['Les priorités', () => ouvrirFiche('priorites')]]]);
   return c.filter(x => !refusConsignes.has(x[0]));
 }
 function coach() {
   if (!survie) return;
+  $('#coach').classList.toggle('panique', $('#v-guide')?.classList.contains('active')); // onglet Guide : juste « Pas de panique », en gros
   const [cur] = consignes();
   if (!cur) return;
   const [id, msg, actions] = cur;
