@@ -11,6 +11,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 // ---------- Mémoire locale ----------
 let S = { profil: 'rando', fiche: {}, contacts: [], points: [], trace: [], sac: [], plan: {}, theme: '', ia: false, cible: null };
 try { Object.assign(S, JSON.parse(localStorage.getItem('repere') || '{}')); } catch {}
+delete S.route; // à chaque ouverture : pas d'ancien itinéraire, juste ma position (il reste dans « Mes trajets »)
 const save = () => { try { localStorage.setItem('repere', JSON.stringify(S)); } catch {} };
 
 // ---------- Langue : français, anglais, espagnol ----------
@@ -1730,17 +1731,17 @@ setInterval(() => {
 }, 15000);
 
 // ---------- Radio en direct (Radio France, par les données cellulaires) ----------
-// Radio France en qualité basse (32 kbit/s ≈ 15 Mo/h) ; les autres sont en 64 à 128 kbit/s (30 à 60 Mo/h).
-const RF = s => `https://icecast.radiofrance.fr/${s}-lofi.mp3`;
+// Radio France en 128 kbit/s (≈ 60 Mo/h, bonne qualité) ; RFI en 64 kbit/s, les autres en 128 kbit/s.
+const RF = s => `https://icecast.radiofrance.fr/${s}-midfi.mp3`;
 const RADIOS = {
   info: ['Infos', {
-    franceinfo: ['franceinfo', RF('franceinfo'), 15], franceinter: ['France Inter', RF('franceinter'), 15],
+    franceinfo: ['franceinfo', RF('franceinfo'), 60], franceinter: ['France Inter', RF('franceinter'), 60],
     rfi: ['RFI', 'https://rfimonde64k.ice.infomaniak.ch/rfimonde-64.mp3', 30], europe1: ['Europe 1', 'https://stream.europe1.fr/europe1.mp3', 60],
     rtl: ['RTL', 'https://icecast.rtl.fr/rtl-1-44-128', 60], rmc: ['RMC', 'https://audio.bfmtv.com/rmcradio_128.mp3', 60],
     bfm: ['BFM Business', 'https://audio.bfmtv.com/bfmbusiness_128.mp3', 60], sud: ['Sud Radio', 'https://start-sud.ice.infomaniak.ch/start-sud-high.mp3', 60],
   }],
   autres: ['Musique et culture', {
-    fip: ['FIP', RF('fip'), 15], franceculture: ['France Culture', RF('franceculture'), 15], mouv: ['Mouv\'', RF('mouv'), 15], francemusique: ['France Musique', RF('francemusique'), 15],
+    fip: ['FIP', RF('fip'), 60], franceculture: ['France Culture', RF('franceculture'), 60], mouv: ['Mouv\'', RF('mouv'), 60], francemusique: ['France Musique', RF('francemusique'), 60],
   }],
 };
 const STATIONS = Object.assign({}, ...Object.values(RADIOS).map(g => g[1]));

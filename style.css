@@ -461,7 +461,7 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 .nav-bandeau > div { flex: 1; min-width: 0; }
 .nav-bandeau b { display: block; font-size: 18px; line-height: 1.2; }
 .nav-bandeau small { display: block; font-size: 14px; opacity: .85; margin-top: 2px; }
-.nav-bandeau button { border: 0; background: rgba(255, 255, 255, .2); color: #fff; width: 36px; height: 36px; border-radius: 50%; font-size: 16px; cursor: pointer; flex: none; }
+.nav-bandeau button { border: 0; background: rgba(255, 255, 255, .2); color: #fff; width: 36px; height: 36px; border-radius: 50%; font-size: 16px; cursor: pointer; flex: none; padding: 0; display: grid; place-items: center; line-height: 1; }
 .plan-wrap.plein .nav-bandeau { top: calc(10px + env(safe-area-inset-top)); }
 /* Devant moi */
 .devant-info { margin: -2px 0 6px; text-align: center; }
@@ -489,13 +489,13 @@ label input:focus { box-shadow: 0 0 0 2px var(--accent); }
 .alerte-danger > span:nth-child(2) { flex: 1; min-width: 0; }
 .alerte-danger b { display: block; font-size: 17px; }
 .alerte-danger small { display: block; font-size: 13px; opacity: .9; }
-.alerte-danger button { border: 0; background: rgba(255, 255, 255, .22); color: #fff; width: 32px; height: 32px; border-radius: 50%; flex: none; }
+.alerte-danger button { border: 0; background: rgba(255, 255, 255, .22); color: #fff; width: 32px; height: 32px; border-radius: 50%; flex: none; padding: 0; display: grid; place-items: center; }
 .plan-danger { background: #E5331F; border-radius: 50%; font-size: 15px; }
 /* Fenêtres : le contenu défile, « Fermer » et la croix restent toujours visibles */
 dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
 #modalBody { overflow-y: auto; min-height: 0; flex: 0 1 auto; margin: 0 -4px; padding: 0 4px; -webkit-overflow-scrolling: touch; }
 #modalFermer { flex: none; margin: 14px 0 0; }
-.modal-x { position: absolute; top: 14px; right: 14px; z-index: 2; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--bg2); color: var(--txt2); font-size: 15px; cursor: pointer; }
+.modal-x { position: absolute; top: 14px; right: 14px; z-index: 2; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--bg2); color: var(--txt2); font-size: 15px; cursor: pointer; padding: 0; display: grid; place-items: center; }
 dialog { position: fixed; }
 #modalBody > :first-child { padding-right: 40px; }
 /* Icônes dessinées */
@@ -509,7 +509,7 @@ dialog { position: fixed; }
 .grille-danger .tuile b { color: var(--danger); }
 .grille-danger .tuile .ic { width: 28px; height: 28px; }
 .alerte-danger .ic, .meteo-now .ic { width: 1em; height: 1em; }
-.nav-bandeau button .ic { width: 18px; height: 18px; vertical-align: middle; }
+.nav-bandeau button .ic { width: 18px; height: 18px; display: block; }
 #meteoJours i .ic { width: 22px; height: 22px; }
 .pays-choix { width: 100%; margin-top: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--ligne); background: var(--bg2); color: inherit; font: inherit; }
 .row .pays-choix { width: auto; margin-top: 0; }
