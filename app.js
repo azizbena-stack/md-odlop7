@@ -791,13 +791,16 @@ function majHoraires() {
   $('#itiHoraires').hidden = !R || !Number.isFinite(R.t) || !$('#planCalcul').hidden;
   if ($('#itiHoraires').hidden) return;
   const maintenant = Date.now(), depart = new Date(departGuidage ?? maintenant);
-  const arrivee = new Date(maintenant + (resteGuidage ?? R.t) * 1000);
+  const reste = Math.max(0, resteGuidage ?? R.t);
+  const arrivee = new Date(maintenant + reste * 1000);
   const formateur = depart.toDateString() === arrivee.toDateString() ? heureTrajet : dateTrajet;
   for (const [el, date] of [[$('#itiDepart'), depart], [$('#itiArrivee'), arrivee]]) {
     el.dateTime = date.toISOString();
     const texte = formateur.format(date);
     if (texte !== el.textContent) el.textContent = texte;
   }
+  const delai = reste > 0 && reste < 60 ? '< 1 min' : duree(reste * 1000);
+  if ($('#itiReste').textContent !== delai) $('#itiReste').textContent = delai;
 }
 setInterval(majHoraires, 30000);
 
@@ -816,7 +819,7 @@ function demarrerGuidage() {
   const el = document.createElement('div'); el.className = 'plan-nav';
   el.innerHTML = '<svg viewBox="0 0 40 40"><path d="M20 3 L35 35 L20 27 L5 35Z"/></svg>';
   navMk = marqueurPlan(ici(), el, 'center', { rotationAlignment: 'map', pitchAlignment: 'map' });
-  $('#navBandeau').hidden = false; $('#itiChoix').hidden = true; $('#btnPlein').hidden = true; // pendant le guidage : toujours plein écran, on arrête avec la croix du bandeau vert
+  $('#navBandeau').hidden = false; $('#itiChoix').hidden = true; $('#btnPlein').hidden = true;
   pleinEcranCarte(true); afficherCalculCarte('');
   voixEtape = { depart: true }; horsRoute = false; dire(t('C\'est parti vers {n}.', { n: S.route.dest.nom }));
   dessinerRoute(S.route, false); majGuidage();
@@ -825,7 +828,7 @@ function demarrerGuidage() {
 function arreterGuidage(msg) {
   if (!msg) stopperVoix();
   guidage = false; departGuidage = resteGuidage = null; navMk?.remove(); navMk = null; anim = affiche = null; cancelAnimationFrame(rafNav); rafNav = 0;
-  $('#navBandeau').hidden = true; $('#navVirage').hidden = true; $('#btnPlein').hidden = false; if (S.route) dessinerRoute(S.route, false);
+  $('#navBandeau').hidden = true; $('#btnPlein').hidden = false; if (S.route) dessinerRoute(S.route, false);
   pleinEcranCarte(false);
   plan?.easeTo({ pitch: en3D ? 60 : 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 } });
   majMoiPlan(); if (msg) { $('#itiRes').textContent = msg; afficherCalculCarte(msg); }
@@ -878,22 +881,26 @@ function majGuidage() {
   majHoraires();
   const prochaine = idxEtapes.find(e => cumul[e.i] > progression + 2);
   const dEtape = prochaine ? cumul[prochaine.i] - progression + dmin : fin;
-  $('#navConsigne').textContent = dmin > 60 ? 'Tu t\'écartes de l\'itinéraire : rejoins la ligne violette' : prochaine ? prochaine.t : 'Tout droit jusqu\'à l\'arrivée';
-  $('#navDist').textContent = t('Dans {d} · arrivée à {f}', { d: fmtDist(dEtape), f: fmtDist(fin) });
-  afficherVirage(progression, dmin);
+  afficherConsigne(prochaine, progression, dmin, dEtape, fin);
   annoncer(prochaine, dEtape, dmin);
 }
-function afficherVirage(progression, ecart) {
-  const fenetre = $('#navVirage');
-  const approche = ecart <= 60 && idxEtapes.find(e => e.direction && cumul[e.i] > progression + 2);
-  const restant = approche ? cumul[approche.i] - progression : Infinity;
-  fenetre.hidden = restant > 800;
-  if (fenetre.hidden) return;
-  const icon = approche.direction === 'rond-point' ? '#i-rond-point' : '#i-virage';
-  fenetre.dataset.direction = approche.direction;
-  fenetre.querySelector('use').setAttribute('href', icon);
-  $('#navVirageDistance').textContent = fmtDist(restant);
-  if ($('#navVirageTexte').textContent !== approche.t) $('#navVirageTexte').textContent = approche.t;
+function afficherConsigne(prochaine, progression, ecart, dEtape, fin) {
+  const horsItineraire = ecart > 60;
+  const approche = !horsItineraire && idxEtapes.find(e => e.direction
+    && cumul[e.i] > progression + 2 && cumul[e.i] <= progression + 800);
+  const manoeuvre = $('#navManoeuvre'), consigne = $('#navConsigne'), distances = $('#navDist');
+  manoeuvre.hidden = !approche;
+  distances.hidden = !!approche;
+  if (approche) {
+    manoeuvre.dataset.direction = approche.direction;
+    manoeuvre.querySelector('use').setAttribute('href', approche.direction === 'rond-point' ? '#i-rond-point' : '#i-virage');
+    $('#navManoeuvreDistance').textContent = fmtDist(cumul[approche.i] - progression);
+  } else {
+    distances.textContent = t('Dans {d} · arrivée à {f}', { d: fmtDist(dEtape), f: fmtDist(fin) });
+  }
+  const texte = horsItineraire ? t('Tu t\'écartes de l\'itinéraire : rejoins la ligne violette')
+    : approche?.t ?? prochaine?.t ?? t('Tout droit jusqu\'à l\'arrivée');
+  if (consigne.textContent !== texte) consigne.textContent = texte;
 }
 // Voix du guidage : une annonce « Dans 300 mètres, … » puis la consigne au moment de tourner (distances plus longues en voiture)
 let voixEtape = {}, horsRoute = false;
@@ -935,7 +942,6 @@ function boucleNav(t) {
   if (k < 1) rafNav = requestAnimationFrame(boucleNav);
 }
 $('#navStop').onclick = () => arreterGuidage();
-$('#navVoix').onclick = () => $('#btnVoixGps').click();
 
 // Refuges, points d'eau, hôpitaux… et mes points, quand on zoome assez
 let minuteriePoints = 0;
@@ -1593,7 +1599,6 @@ document.addEventListener('click', () => {
   if (S.voix && window.speechSynthesis && !phraseEnCours) prononcer(t('Voix activée.'), null, true);
 }, { once: true, capture: true });
 function majVoix() {
-  $('#navVoix').innerHTML = pic(S.voix ? 'son' : 'muet'); $('#navVoix').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix');
   $('#btnVoixPlan').innerHTML = pic(S.voix ? 'son' : 'muet'); $('#btnVoixPlan').setAttribute('aria-label', S.voix ? 'Couper la voix' : 'Activer la voix'); $('#btnVoixPlan').classList.toggle('coupe', !S.voix);
   $('#regVoix').checked = S.voix; $('#regDangers').checked = S.alerteDanger;
   $('#btnVoixGps').setAttribute('aria-pressed', S.voix); $('#btnAlerteDanger').setAttribute('aria-pressed', S.alerteDanger);

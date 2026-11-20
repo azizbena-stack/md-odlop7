@@ -189,14 +189,16 @@
     <div id="plan"></div>
     <div class="plan-haut">
       <div class="nav-bandeau" id="navBandeau" hidden>
-        <div><b id="navConsigne"></b><small id="navDist"></small></div>
+        <div class="nav-instruction">
+          <div class="nav-manoeuvre" id="navManoeuvre" hidden>
+            <svg class="ic" aria-hidden="true"><use href="#i-virage"/></svg>
+            <b id="navManoeuvreDistance"></b>
+          </div>
+          <span id="navConsigne" role="status"></span>
+          <small id="navDist"></small>
+        </div>
         <button id="navDanger" aria-haspopup="dialog" aria-label="Signaler un danger ici"><svg class="ic" aria-hidden="true"><use href="#i-danger"/></svg></button>
-        <button id="navVoix" aria-label="Couper la voix"><svg class="ic"><use href="#i-son"/></svg></button>
         <button id="navStop" aria-label="Arrêter le guidage">✕</button>
-      </div>
-      <div class="nav-virage" id="navVirage" role="status" hidden>
-        <svg class="ic" aria-hidden="true"><use href="#i-virage"/></svg>
-        <div><b id="navVirageDistance" aria-hidden="true"></b><span id="navVirageTexte"></span></div>
       </div>
       <button id="btnDangerPlan" class="plan-btn" aria-haspopup="dialog"><svg aria-hidden="true"><use href="#i-danger"/></svg> <span>Signaler un danger ici</span></button>
       <div class="plan-haut-actions">
@@ -221,6 +223,7 @@
       <dl class="iti-horaires" id="itiHoraires" hidden>
         <div><dt>Départ</dt><dd><time id="itiDepart"></time></dd></div>
         <div><dt>Arrivée estimée</dt><dd><time id="itiArrivee"></time></dd></div>
+        <div><dt>Arrivée dans</dt><dd id="itiReste"></dd></div>
       </dl>
     </div>
   </div>

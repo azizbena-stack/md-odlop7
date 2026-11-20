@@ -197,6 +197,7 @@ const T = {
   "C'est parti vers {n}.": ["Let's go to {n}.", "Vamos hacia {n}."],
   "Dans {d}, {c}.": ["In {d}, {c}.", "En {d}, {c}."],
   "Arrivée dans {d}.": ["Arriving in {d}.", "Llegada en {d}."],
+  "Arrivée dans": ["Arriving in", "Llegada en"],
   "Tu t'écartes de l'itinéraire. Rejoins la ligne violette.": ["You're off route. Get back to the purple line.", "Te sales de la ruta. Vuelve a la línea violeta."],
   "{n} mètres": ["{n} meters", "{n} metros"], "{n} kilomètres": ["{n} kilometers", "{n} kilómetros"],
   "Voix activée.": ["Voice on.", "Voz activada."], "Voix du guidage activée.": ["Navigation voice on.", "Voz de guía activada."],
