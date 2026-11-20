@@ -1,5 +1,5 @@
 // Hors ligne : tout est mis en cache à l'installation, puis servi sans réseau.
-const V = 'repere-v51', TUILES = 'repere-tuiles', ZONES = 'repere-zones';
+const V = 'repere-v52', TUILES = 'repere-tuiles', ZONES = 'repere-zones';
 const FICHIERS = ['./', 'index.html', 'legal.html', 'aide-carte.html', 'style.css', 'app.js', 'carte-2d.js', 'lieux-carte.js', 'vendor/lecture-tuiles.js', 'vendor/lecture-tuiles.LICENSE', 'geo.js', 'guide.js', 'i18n.js', 'data/pays.json', 'radios/bfm.svg', 'radios/europe1.png', 'radios/fip.svg', 'radios/franceculture.svg', 'radios/franceinfo.svg', 'radios/franceinter.svg', 'radios/francemusique.svg', 'radios/mouv.svg', 'radios/rfi.svg', 'radios/rmc.svg', 'radios/rtl.svg', 'radios/sud.svg', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'data/communes.json', 'data/points.json', 'data/wiki.json', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css', 'vendor/leaflet.js', 'vendor/leaflet.css', 'vendor/leaflet.LICENSE', 'vendor/wllama.js', 'vendor/wllama.wasm', 'vendor/wllama-mt.wasm'];
 // La météo (api.open-meteo.com) n'est pas mise en cache ici : l'app la garde elle-même dans le téléphone.

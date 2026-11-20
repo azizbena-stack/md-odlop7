@@ -15,6 +15,8 @@ let S = { profil: 'rando', fiche: {}, contacts: [], points: [], trace: [], sac: 
 try { Object.assign(S, JSON.parse(localStorage.getItem('repere') || '{}')); } catch {}
 delete S.route; // à chaque ouverture : pas d'ancien itinéraire, juste ma position (il reste dans « Mes trajets »)
 const save = () => { try { localStorage.setItem('repere', JSON.stringify(S)); } catch {} };
+// Laisse le navigateur dessiner le bouton touché avant un travail lourd (relief 3D, sauvegarde…)
+const apresAffichage = f => { let fait = false; const g = () => fait || (fait = true, f()); requestAnimationFrame(() => setTimeout(g)); setTimeout(g, 120); }; // 120 ms : secours si l'app passe en arrière-plan
 
 // ---------- Langue : français, anglais, espagnol ----------
 // Les textes restent écrits en français dans le code ; i18n.js donne leur traduction. Changer de langue recharge l'app.
@@ -123,6 +125,18 @@ function demarrerGps() {
   $('#btnGps').hidden = true;
 }
 $('#btnGps').onclick = demarrerGps;
+// Retour dans l'app : une position de plus de 30 s est périmée → on redemande une vraie position (pas le cache)
+// et on recentre la carte dessus, même si un ancien itinéraire est affiché.
+function positionFraiche() {
+  if (document.hidden || !pos || Date.now() - pos.timestamp < 30e3 || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(p => {
+    onPos(p);
+    if (plan && !guidage) { suivre = true; plan.easeTo({ center: lnglat(ici()), zoom: Math.max(plan.getZoom(), 14) }); }
+  }, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  if (watchId != null) demarrerGps(); // iPhone coupe parfois le suivi en arrière-plan
+}
+document.addEventListener('visibilitychange', positionFraiche);
+addEventListener('pageshow', positionFraiche);
 
 function onPos(p) {
   const premier = !pos; pos = p;
@@ -754,6 +768,9 @@ $('#planSuite').onclick = () => (plan?.raster ? $('#allerA') : $('#cartesHorsLig
 // 2D = vue du dessus (à vol d'oiseau) ; 3D = carte inclinée avec le relief en volume et les bâtiments
 function vue3D(on) {
   en3D = on; $('#btn3D').textContent = on ? '2D' : '3D'; $('#btn3D').classList.toggle('on', on);
+  apresAffichage(() => en3D === on && appliquer3D(on));
+}
+function appliquer3D(on) {
   if (!plan?.getSource('dem')) return;
   if (!on) { plan.setTerrain(null); return guidage || plan.easeTo({ pitch: 0, bearing: 0 }); }
   // Relief d'abord, inclinaison ensuite : sinon la caméra reste à l'altitude 0, « sous » la montagne, le temps que les altitudes arrivent
@@ -932,9 +949,12 @@ function allerVers(ll, cap) {
   anim = { de: { ...affiche }, vers: { ll, cap }, t0: t, dur: anim ? Math.min(1500, Math.max(300, t - anim.t0)) : 0 };
   if (!rafNav) rafNav = requestAnimationFrame(boucleNav);
 }
+let imageNav = 0;
 function boucleNav(t) {
   rafNav = 0; if (!guidage || !anim || !navMk || !carteVisible()) return;
   const k = anim.dur ? Math.min(1, (t - anim.t0) / anim.dur) : 1, { de, vers } = anim;
+  if (phraseEnCours && k < 1 && t - imageNav < 100) { rafNav = requestAnimationFrame(boucleNav); return; } // ~10 images/s pendant la voix
+  imageNav = t;
   const dCap = ((vers.cap - de.cap + 540) % 360) - 180; // par le plus court
   affiche = { ll: [de.ll[0] + (vers.ll[0] - de.ll[0]) * k, de.ll[1] + (vers.ll[1] - de.ll[1]) * k], cap: (de.cap + dCap * k + 360) % 360 };
   navMk.setLngLat(lnglat(affiche.ll)).setRotation(affiche.cap);
@@ -951,7 +971,7 @@ function programmerPointsPlan() {
   minuteriePoints = setTimeout(() => {
     minuteriePoints = 0;
     majPointsPlan();
-  }, 200);
+  }, phraseEnCours ? 1500 : 200); // pas de gros calcul pendant que la voix parle
 }
 function majPointsPlan() {
   if (!plan || !carteVisible()) return;
@@ -1247,7 +1267,7 @@ async function itiHorsLigne(dep, arr, mode) {
   const lignes = g => g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
   for (const f of plan.querySourceFeatures(src, { sourceLayer: 'transportation' })) {
     const kmh = vit[f.properties.class]; if (!kmh) continue;
-    const sens = mode === 'car' ? (+f.properties.oneway || 0) : 0;
+    const sens = mode !== 'foot' ? (+f.properties.oneway || 0) : 0; // voiture et vélo : pas de sens interdit
     for (const l of lignes(f.geometry)) for (let i = 1; i < l.length; i++) { const a = noeud(l[i - 1]), c = noeud(l[i]); if (a !== c) relier(a, c, kmh, sens); }
   }
   const noms = new Map(); // nom des rues, lu sur la couche des noms (mêmes sommets)
@@ -1518,6 +1538,7 @@ $('#btnSifflet').onclick = () => {
 
 // ---------- Voix (synthèse vocale du téléphone, hors ligne sur iPhone et la plupart des Android) ----------
 S.voix ??= true; S.alerteDanger ??= true;
+if (S.debitVoix === .95) { delete S.debitVoix; save(); } // ancien « Naturel » : la voix au débit d'origine est plus fluide
 const fileVoix = new Map();
 let phraseEnCours = null, pauseVoix = 0;
 const voixPourLangue = () => (window.speechSynthesis?.getVoices() || [])
@@ -1562,7 +1583,7 @@ function prononcer(texte, secours, muet = false) {
   const synth = window.speechSynthesis;
   const voix = voixGuidage(), u = new SpeechSynthesisUtterance(texte);
   u.lang = voix?.lang || LOC; if (voix) u.voice = voix;
-  u.rate = S.debitVoix || .95;
+  u.rate = S.debitVoix || 1;
   if (muet) u.volume = 0;
   phraseEnCours = u; // garder l'objet vivant jusqu'à la fin de la lecture sur Safari et Chrome
   const finir = erreur => {
@@ -1605,7 +1626,7 @@ function majVoix() {
 }
 majVoix();
 $('#btnVoixPlan').onclick = () => $('#btnVoixGps').click();
-$('#btnVoixGps').onclick = () => { S.voix = !S.voix; save(); majVoix(); if (S.voix) dire('Voix du guidage activée.'); else stopperVoix(); };
+$('#btnVoixGps').onclick = () => { S.voix = !S.voix; majVoix(); if (!S.voix) stopperVoix(); apresAffichage(() => { save(); if (S.voix) dire('Voix du guidage activée.'); }); };
 $('#btnAlerteDanger').onclick = () => {
   S.alerteDanger = !S.alerteDanger; save(); majVoix();
   if (S.alerteDanger) verifierDangers();
@@ -2120,14 +2141,14 @@ const estNuit = () => { const s = sunTimes(new Date(), ...(pos ? ici() : [46.6, 
 if (S.theme) { delete S.theme; save(); } // l'ancien mode nuit rouge est retiré
 const themeSysteme = matchMedia('(prefers-color-scheme: dark)');
 const appliquerTheme = () => {
-  const systeme = S.ambiance === 'systeme', nuit = systeme ? themeSysteme.matches : estNuit();
+  const systeme = S.ambiance === 'systeme', naturel = S.ambiance === 'naturel', nuit = naturel ? false : systeme ? themeSysteme.matches : estNuit();
   const avant = document.documentElement.dataset.theme;
   document.documentElement.dataset.theme = nuit ? 'nuit' : 'jour';
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', S.ambiance && !systeme ? '#1C1C1E' : nuit ? '#000000' : '#DCE7F3');
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', naturel ? '#FFFFFF' : S.ambiance && !systeme ? '#1C1C1E' : nuit ? '#000000' : '#DCE7F3');
   if (avant && avant !== document.documentElement.dataset.theme && styleCarte()[0] === 'auto') plan?.setStyle?.(urlStyle());
   // Styles Studio : même mise en page sombre, couleurs différentes (graphite = l'ancien interrupteur « Style Studio »)
   if (S.studio) { S.ambiance = 'graphite'; delete S.studio; save(); }
-  document.documentElement.classList.toggle('studio', !!S.ambiance && !systeme); document.documentElement.dataset.ambiance = S.ambiance || '';
+  document.documentElement.classList.toggle('studio', !!S.ambiance && !systeme && !naturel); document.documentElement.dataset.ambiance = S.ambiance || '';
   document.querySelectorAll('#ambiances [data-a]').forEach(b => b.classList.toggle('on', b.dataset.a === (S.ambiance || '')));
 };
 function choisirAmbiance(ambiance) {
@@ -2160,7 +2181,7 @@ function ouvrirReglages(e) {
   $('#regTrace').checked = !!S.traceCarte;
   $('#regPoints').checked = S.pointsCarte !== false;
   $('#regVerrouillage').checked = S.verrouillageCarte !== false;
-  $('#regDebit').value = String(S.debitVoix || .95);
+  $('#regDebit').value = String(S.debitVoix || 1);
   $('#regUnites').value = FMT.imperial ? 'imperial' : 'metrique';
   majListeVoix();
   majVoix();

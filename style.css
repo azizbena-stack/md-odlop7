@@ -18,6 +18,14 @@
     --barre: rgba(30, 30, 32, .72); --verre-bord: rgba(255, 255, 255, .1); --ombre: none;
     color-scheme: dark;
   }
+/* Naturel : fond blanc, texte noir, jour comme nuit (le mode survie reste devant) */
+:root[data-ambiance="naturel"] {
+  --bg: #FFFFFF; --bg2: rgba(0, 0, 0, .05); --surface: #FFFFFF; --surface2: #F5F5F7; --ligne: rgba(0, 0, 0, .12);
+  --txt: #000000; --txt2: #3C3C43; --txt3: #8E8E93;
+  --barre: rgba(255, 255, 255, .9); --verre-bord: rgba(0, 0, 0, .08);
+  --ombre: 0 0 0 1px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .04);
+  color-scheme: light;
+}
 /* Mode survie : toujours sombre (économise la batterie, ambiance alerte) */
 :root.survie:not([data-theme="rouge"]) {
   --bg: #000000; --bg2: rgba(118, 118, 128, .24); --surface: #1C1C1E; --surface2: #1C1C1E; --ligne: rgba(84, 84, 88, .55);
